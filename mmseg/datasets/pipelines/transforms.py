@@ -426,8 +426,9 @@ class Resize(object):
     def _resize_seg(self, results):
         """Resize semantic segmentation map with ``results['scale']``."""
         for key in results.get('seg_fields', []):
-            print(results.get('seg_fields', []))
-            print(results[key].shape)
+            with open("hello.txt", "w") as my_file:
+                my_file.write(results.get('seg_fields', []))
+                my_file.write(results[key].shape)
             asd
             if self.keep_ratio:
                 gt_seg = mmcv.imrescale(
