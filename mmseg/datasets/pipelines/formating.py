@@ -202,6 +202,9 @@ class DefaultFormatBundle(object):
             if len(img.shape) < 3:
                 img = np.expand_dims(img, -1)
             img = np.ascontiguousarray(img.transpose(2, 0, 1))
+            with open("/cluster/work/cvl/denfan/diandian/seg/SegFormer/hello.txt", "w") as my_file:
+                my_file.write(str(img.shape))
+            asd
             results['img'] = DC(to_tensor(img), stack=True)
         if 'gt_semantic_seg' in results:
             # convert to long
@@ -281,9 +284,9 @@ class Collect(object):
         data['img_metas'] = DC(img_meta, cpu_only=True)
         for key in self.keys:
             data[key] = results[key]
-        with open("/cluster/work/cvl/denfan/diandian/seg/SegFormer/hello.txt", "w") as my_file:
-            my_file.write(str(data["img"].shape))
-        asd
+        # with open("/cluster/work/cvl/denfan/diandian/seg/SegFormer/hello.txt", "w") as my_file:
+        #     my_file.write(str(results["img"].shape))
+        # asd
 
         return data
 
