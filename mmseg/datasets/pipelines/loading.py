@@ -11,7 +11,7 @@ def vanishing_point_to_depth_mask(vanishing_point, image_size, level_configs = [
     H, W = image_size[0], image_size[1]
     if not vanishing_point:
         vanishing_point = [int(H/2), int(W/2)]
-    depth_masks = torch.zeros(1, H, W, dtype=int)
+    depth_masks = torch.zeros(H, W, dtype=int)
     x1, x2 = int(vanishing_point[0]), int(vanishing_point[1])
     for level_scale in level_configs:
         x1_bias = int(H * level_scale / 2)
@@ -20,8 +20,9 @@ def vanishing_point_to_depth_mask(vanishing_point, image_size, level_configs = [
         x1_max = min(H, x1 + x1_bias)
         x2_min = max(0, x2 - x2_bias)
         x2_max = min(W, x2 + x2_bias)
-        depth_masks[0, x1_min:x1_max, x2_min:x2_max] += 1
+        depth_masks[x1_min:x1_max, x2_min:x2_max] += 1
     depth_masks = np.asarray(depth_masks)
+    depth_masks = np.expand_dims(depth_masks, 2)
     return depth_masks
 
 
@@ -99,7 +100,7 @@ class LoadImageFromFile(object):
         # add vanishing_mask here!
 
         vanishing_mask = vanishing_point_to_depth_mask(None, (img.shape[0], img.shape[1]))
-        results["img"] = np.concatenate((results["img"], vanishing_mask.transpose(0, 2, 1)), axis=0)
+        results["img"] = np.concatenate((results["img"], vanishing_mask), axis=0)
         asd
         return results
 
