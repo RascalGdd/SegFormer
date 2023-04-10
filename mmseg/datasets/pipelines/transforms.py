@@ -428,7 +428,7 @@ class Resize(object):
         for key in results.get('seg_fields', []):
             with open("/cluster/work/cvl/denfan/diandian/seg/SegFormer/hello.txt", "w") as my_file:
                 my_file.write(key)
-                my_file.write(results[key].shape)
+                my_file.write(str(results[key].shape))
             asd
             if self.keep_ratio:
                 gt_seg = mmcv.imrescale(
