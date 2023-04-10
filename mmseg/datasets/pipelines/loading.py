@@ -100,7 +100,7 @@ class LoadImageFromFile(object):
         # add vanishing_mask here!
 
         vanishing_mask = vanishing_point_to_depth_mask(None, (img.shape[0], img.shape[1]))
-        results["img"] = np.concatenate((results["img"], vanishing_mask), axis=0)
+        results["img"] = np.concatenate((results["img"], vanishing_mask), axis=2)
         asd
         return results
 
