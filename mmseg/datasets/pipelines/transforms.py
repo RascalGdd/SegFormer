@@ -426,6 +426,9 @@ class Resize(object):
     def _resize_seg(self, results):
         """Resize semantic segmentation map with ``results['scale']``."""
         for key in results.get('seg_fields', []):
+            print(results.get('seg_fields', []))
+            print(results[key].shape)
+            asd
             if self.keep_ratio:
                 gt_seg = mmcv.imrescale(
                     results[key], results['scale'], interpolation='nearest')
