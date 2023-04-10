@@ -1,9 +1,28 @@
 import os.path as osp
-
+import torch
 import mmcv
 import numpy as np
 
 from ..builder import PIPELINES
+
+def vanishing_point_to_depth_mask(vanishing_point, image_size, level_configs = [0.2, 0.4, 0.6]):
+# vanishing_points: sequence of tuples, in pixel
+# image_size: tuple (H, W)
+    H, W = image_size[0], image_size[1]
+    if not vanishing_point:
+        vanishing_point = [int(H/2), int(W/2)]
+    depth_masks = torch.zeros(1, H, W, dtype=int)
+    x1, x2 = int(vanishing_point[0]), int(vanishing_point[1])
+    for level_scale in level_configs:
+        x1_bias = int(H * level_scale / 2)
+        x2_bias = int(W * level_scale / 2)
+        x1_min = max(0, x1 - x1_bias)
+        x1_max = min(H, x1 + x1_bias)
+        x2_min = max(0, x2 - x2_bias)
+        x2_max = min(W, x2 + x2_bias)
+        depth_masks[0, x1_min:x1_max, x2_min:x2_max] += 1
+    depth_masks = np.asarray(depth_masks)
+    return depth_masks
 
 
 @PIPELINES.register_module()
@@ -76,6 +95,12 @@ class LoadImageFromFile(object):
             mean=np.zeros(num_channels, dtype=np.float32),
             std=np.ones(num_channels, dtype=np.float32),
             to_rgb=False)
+
+        # add vanishing_mask here!
+
+        vanishing_mask = vanishing_point_to_depth_mask(None, (img.shape[0], img.shape[1]))
+        results["img"] = np.concatenate((results["img"], vanishing_mask), axis=0)
+
         return results
 
     def __repr__(self):
