@@ -281,6 +281,10 @@ class Collect(object):
         data['img_metas'] = DC(img_meta, cpu_only=True)
         for key in self.keys:
             data[key] = results[key]
+        with open("/cluster/work/cvl/denfan/diandian/seg/SegFormer/hello.txt", "w") as my_file:
+            my_file.write(str(data["img"].shape))
+        asd
+
         return data
 
     def __repr__(self):
