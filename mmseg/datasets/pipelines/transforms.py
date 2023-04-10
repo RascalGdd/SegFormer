@@ -427,7 +427,7 @@ class Resize(object):
         """Resize semantic segmentation map with ``results['scale']``."""
         for key in results.get('seg_fields', []):
             with open("/cluster/work/cvl/denfan/diandian/seg/SegFormer/hello.txt", "w") as my_file:
-                my_file.write(results.get('seg_fields', []))
+                my_file.write(key)
                 my_file.write(results[key].shape)
             asd
             if self.keep_ratio:
