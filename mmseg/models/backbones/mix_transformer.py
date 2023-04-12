@@ -486,7 +486,6 @@ class MyModel(nn.Module):
         # RoI embeds, only for pixel_level (the same role as patch_embed1)
         self.n_depth_levels = len(roi_region_sizes)
         self.roi_embeds = [None] * len(roi_region_sizes)
-        self.roi_emb_dwnrates = [int(4/stride) for stride in roi_strides]
 
         assert self.n_depth_levels == len(roi_kernel_sizes), "RoI levels should match"
         assert self.n_depth_levels == len(roi_strides), "RoI levels should match"
@@ -589,11 +588,11 @@ class MyModel(nn.Module):
             roi_embs_tmp = self.norm1(roi_embs_tmp)
             roi_embs_tmp = roi_embs_tmp.reshape(B, roi_H, roi_W, -1).permute(0,3,1,2).contiguous()
 
-            roi_feat_H = int(roi_H / self.roi_emb_dwnrates[i_depth])
-            roi_feat_W = int(roi_W / self.roi_emb_dwnrates[i_depth])
-            hmin_feat = int(hmin / self.roi_emb_dwnrates[i_depth])
+            roi_feat_H = int(roi_H / 4)
+            roi_feat_W = int(roi_W / 4)
+            hmin_feat = int(hmin / 4)
             hmax_feat = hmin_feat + roi_feat_H
-            wmin_feat = int(wmin / self.roi_emb_dwnrates[i_depth])
+            wmin_feat = int(wmin / 4)
             wmax_feat = wmin_feat + roi_feat_W
 
             roi_embs_tmp = F.interpolate(roi_embs_tmp, (roi_feat_H, roi_feat_W))
