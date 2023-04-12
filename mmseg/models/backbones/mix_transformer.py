@@ -15,7 +15,7 @@ from mmseg.models.builder import BACKBONES
 from mmseg.utils import get_root_logger
 from mmcv.runner import load_checkpoint
 import math
-
+from torchvision.utils import save_image
 
 class Mlp(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
@@ -311,6 +311,12 @@ class MixVisionTransformer(nn.Module):
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
     def forward_features(self, x):
+        img = x[0, :3, :, :]
+        mask = x[0, 3:, :, :]
+        save_image(img, "img.jpg")
+        save_image(mask, "mask.jpg")
+        asd
+
         # print(x.shape)
         # asd
         B = x.shape[0]
