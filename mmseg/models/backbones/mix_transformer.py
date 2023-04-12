@@ -311,15 +311,6 @@ class MixVisionTransformer(nn.Module):
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
     def forward_features(self, x):
-        img = x[0, :3, :, :]
-        mask = x[0, 3:, :, :]
-        img = (img + 1)/2
-        save_image(img, "img.jpg")
-        save_image(mask, "mask.jpg")
-        asd
-
-        # print(x.shape)
-        # asd
         B = x.shape[0]
         outs = []
 
