@@ -5,13 +5,14 @@ import numpy as np
 
 from ..builder import PIPELINES
 
-def vanishing_point_to_depth_mask(vanishing_point, image_size, level_configs = [0.2, 0.4, 0.6]):
+def vanishing_point_to_depth_mask(vanishing_point, image_size, level_configs = np.arange(0,10,0.05)):
 # vanishing_points: sequence of tuples, in pixel
 # image_size: tuple (H, W)
     H, W = image_size[0], image_size[1]
+    num_levels = len(level_configs) + 1
     if not vanishing_point:
         vanishing_point = [int(H/2), int(W/2)]
-    depth_masks = torch.zeros(H, W, dtype=int)
+    depth_masks = torch.zeros(H, W, dtype=float)
     x1, x2 = int(vanishing_point[0]), int(vanishing_point[1])
     for level_scale in level_configs:
         x1_bias = int(H * level_scale / 2)
@@ -20,9 +21,10 @@ def vanishing_point_to_depth_mask(vanishing_point, image_size, level_configs = [
         x1_max = min(H, x1 + x1_bias)
         x2_min = max(0, x2 - x2_bias)
         x2_max = min(W, x2 + x2_bias)
-        depth_masks[x1_min:x1_max, x2_min:x2_max] += 1
+        if x2_max > 0 and x1_max > 0:
+            depth_masks[:, x1_min:x1_max, x2_min:x2_max] += 1
     depth_masks = np.asarray(depth_masks)
-    return depth_masks
+    return depth_masks / num_levels
 
 
 @PIPELINES.register_module()

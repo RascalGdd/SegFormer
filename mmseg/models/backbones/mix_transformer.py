@@ -310,6 +310,53 @@ class MixVisionTransformer(nn.Module):
         self.num_classes = num_classes
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
+    def extract_mid_feature(self, x):
+        B = x.shape[0]
+        # stage 1
+        x, H, W = self.patch_embed1(x)
+        for i, blk in enumerate(self.block1):
+            x = blk(x, H, W)
+        x = self.norm1(x)
+        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+        return x, H, W
+
+    def forward_features_add_features(self, x, mid_features):
+        B = x.shape[0]
+        outs = []
+
+        # stage 1
+        n_depth_levels = len(mid_features)
+        for i_depth in range(n_depth_levels):
+            x += mid_features[i_depth]
+
+        outs.append(x)
+
+        # stage 2
+        x, H, W = self.patch_embed2(x)
+        for i, blk in enumerate(self.block2):
+            x = blk(x, H, W)
+        x = self.norm2(x)
+        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+        outs.append(x)
+
+        # stage 3
+        x, H, W = self.patch_embed3(x)
+        for i, blk in enumerate(self.block3):
+            x = blk(x, H, W)
+        x = self.norm3(x)
+        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+        outs.append(x)
+
+        # stage 4
+        x, H, W = self.patch_embed4(x)
+        for i, blk in enumerate(self.block4):
+            x = blk(x, H, W)
+        x = self.norm4(x)
+        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+        outs.append(x)
+
+        return outs
+
     def forward_features(self, x):
         B = x.shape[0]
         outs = []
@@ -425,18 +472,276 @@ class mit_b5(MixVisionTransformer):
 
 @BACKBONES.register_module()
 class MyModel(nn.Module):
-    def __init__(self, **kwargs):
+    def __init__(self, embed_dims=[64, 128, 256, 512],
+                 num_heads=[1, 2, 4, 8], mlp_ratios=[4, 4, 4, 4], qkv_bias=False, qk_scale=None, drop_rate=0.,
+                 attn_drop_rate=0., drop_path_rate=0., norm_layer=nn.LayerNorm,
+                 depths=[3, 4, 6, 3], sr_ratios=[8, 4, 2, 1],
+                 roi_region_sizes=[64, 128, 256], roi_kernel_sizes=[1, 3, 5], roi_strides=[1, 1, 2], **kwargs):
         super(MyModel, self).__init__()
         self.mit = mit_b3()
 
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
+        cur = 0
+
+        # RoI embeds, only for pixel_level (the same role as patch_embed1)
+        self.n_depth_levels = len(roi_region_sizes)
+        self.roi_embeds = [None] * len(roi_region_sizes)
+        self.roi_emb_dwnrates = [int(4/stride) for stride in roi_strides]
+
+        assert self.n_depth_levels == len(roi_kernel_sizes), "RoI levels should match"
+        assert self.n_depth_levels == len(roi_strides), "RoI levels should match"
+
+        self.roi_region_sizes = roi_region_sizes
+        self.roi_kernel_sizes = roi_kernel_sizes
+        self.roi_strides = roi_strides
+
+        self.block1 = nn.ModuleList([Block(
+            dim=embed_dims[0], num_heads=num_heads[0], mlp_ratio=mlp_ratios[0], qkv_bias=qkv_bias, qk_scale=qk_scale,
+            drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[cur + i], norm_layer=norm_layer,
+            sr_ratio=sr_ratios[0])
+            for i in range(depths[0])])
+        self.norm1 = norm_layer(embed_dims[0])
+
+        for i in range(self.n_depth_levels):
+            self.roi_patch_embeds[i] = OverlapPatchEmbed(
+                img_size=roi_region_sizes[i],
+                patch_size=roi_kernel_sizes[i],
+                stride=roi_strides[i],
+                in_chans=self.in_chans,
+                embed_dim=self.embed_dims[0]
+            )
+
+    @torch.no_grad()
+    def select_roi(self, depth_map):
+        roi_region_sizes = self.roi_region_sizes
+        roi_kernel_sizes = self.roi_kernel_sizes
+
+        B, _, H, W = depth_map.shape
+        img_size = (H, W)
+        N = self.n_depth_levels
+
+        # max_val: (B,1,1,1)
+        max_val = torch.amax(depth_map, dim=(2, 3)).unsqueeze(-1).unsqueeze(-1)
+
+        # max_val_ids: (L,4), e.g., [[0,0,0,0], [0,0,0,1],..., [3,0,16,501]] (list of max_value_points)
+        max_val_ids = (depth_map == max_val).nonzero()
+
+        # format: [[(h,w) for depth_lvls] for batch], -1 (default) means not-applicable
+        min_ids = torch.zeros(B, N, 2).long() - 1  # lower-left anchor point, (B,N,2)
+        max_ids = torch.zeros(B, N, 2).long() - 1  # upper-right anchor point, (B,N,2)
+        roi_regions_masks = torch.zeros(B, N, H, W)
+
+        for i_data in range(B):
+            central_id = max_val_ids[max_val_ids[:, 0] == i_data].float().mean(dim=0).long()[2:]  # (h,w)
+            this_max_val = max_val[i_data].cpu().detach().item()
+            for i_depth in range(N):
+                # min_id = torch.clamp(central_id - roi_region_sizes[i_depth] / 2, min=0, max=H).long()
+                # max_id = torch.clamp(central_id + roi_region_sizes[i_depth] / 2, min=0, max=H).long()
+                min_id = (central_id - roi_region_sizes[i_depth] / 2).long()
+                max_id = (central_id + roi_region_sizes[i_depth] / 2).long()
+
+                for i_axis in range(2):
+                    if min_id[i_axis] < 0:
+                        max_id[i_axis] += - min_id[i_axis]
+                        min_id[i_axis] = 0
+
+                    if max_id[i_axis] > img_size[i_axis]:
+                        min_id[i_axis] -= max_id[i_axis] - img_size[i_axis]
+                        max_id[i_axis] = img_size[i_axis]
+
+                if (min_id + roi_kernel_sizes[i_depth] < max_id).all():
+                    min_ids[i_data, i_depth, :] = min_id
+                    max_ids[i_data, i_depth, :] = max_id
+                    roi_regions_masks[i_data, i_depth, min_id[0]:max_id[0], min_id[1]:max_id[1]] = 1
+
+        return roi_regions_masks, min_ids, max_ids
 
     def init_weights(self, pretrained=None):
         self.mit.init_weights(pretrained)
         print("success!")
 
+    def generate_features(self, img, depth_map):
+        x_feat, H, W = self.mit.extract_mid_feature(img)
+
+        B = x.shape[0]
+        assert B == 0, "Batch size should equal to 1"
+
+        # stage 1, RoI part
+
+        # new
+        roi_regions_masks, min_ids, max_ids = self.select_roi(depth_map)
+        roi_embs = [x_feat * 0] * self.n_depth_levels
+
+        for i_depth in range(self.n_depth_levels):
+            i_batch = 0
+            hmin = min_ids[i_batch,i_depth,0]
+            hmax = max_ids[i_batch,i_depth,0]
+            wmin = min_ids[i_batch,i_depth,1]
+            wmax = max_ids[i_batch,i_depth,1]
+            roi_embs_tmp = x[0:1, :, hmin:hmax, wmin:wmax]
+
+            roi_embs_tmp, roi_H, roi_W = self.roi_patch_embeds[i_depth](roi_embs[i_depth])
+
+            for i, blk in enumerate(self.block1):
+                roi_embs_tmp = blk(roi_embs_tmp, roi_H, roi_W)
+
+            roi_embs_tmp = self.norm1(roi_embs_tmp)
+            roi_embs_tmp = roi_embs_tmp.reshape(B, roi_H, roi_W, -1).permute(0,3,1,2).contiguous()
+
+            hmin_feat = (hmin / self.roi_emb_dwnrates[i_depth]).long()
+            hmax_feat = (hmax / self.roi_emb_dwnrates[i_depth]).long()
+            wmin_feat = (wmin / self.roi_emb_dwnrates[i_depth]).long()
+            wmax_feat = (wmax / self.roi_emb_dwnrates[i_depth]).long()
+            roi_feat_H = hmax_feat - hmin_feat
+            roi_feat_W = wmax_feat - wmin_feat
+            roi_embs_tmp = F.interpolate(roi_embs_tmp, (roi_feat_H, roi_feat_W))
+
+            roi_embs[i_depth][0:1,:, hmin_feat:hmax_feat, wmin_feat:wmax_feat] = roi_embs_tmp * 1
+
+        mid_features = []
+        for i_depth in range(self.n_depth_levels):
+            mid_features.append(F.interpolate(roi_embs[i_depth], (H, W)))
+
+        return x_feat, mid_features
+
+
     def forward(self, x):
         x = x.to(torch.float32)
-        x = x[:, :3, :, :]
-        x = self.mit.forward_features(x)
+        img = x[:, :3, :, :]
+        depth_map = x[:, 3, :, :].unsqueeze(1)
+        x_feat, mid_features = self.generate_features(img, depth_map)
+        result = self.mit.forward_features_add_features(x_feat, mid_features)
 
-        return x
+        return result
+
+
+# class VanishingPointAdditiveViT(MixVisionTransformer):
+#     def __init__(self, roi_region_sizes=[64, 128, 256], roi_kernel_sizes=[1, 3, 5], roi_strides=[1, 1, 2], **kwargs):
+#         super(VanishingPointViT, self).__init__(**kwargs)
+#
+#         # RoI embeds, only for pixel_level (the same role as patch_embed1)
+#         self.n_depth_levels = len(roi_region_sizes)
+#         self.roi_embeds = [None] * len(roi_region_sizes)
+#
+#         assert self.n_depth_levels == len(roi_kernel_sizes), "RoI levels should match"
+#         assert self.n_depth_levels == len(roi_strides), "RoI levels should match"
+#
+#         self.roi_region_sizes = roi_region_sizes
+#         self.roi_kernel_sizes = roi_kernel_sizes
+#         self.roi_strides = roi_strides
+#
+#         for i in range(self.n_depth_levels):
+#             self.roi_patch_embeds[i] = OverlapPatchEmbed(
+#                 img_size=roi_region_sizes[i],
+#                 patch_size=roi_kernel_sizes[i],
+#                 stride=roi_strides[i],
+#                 in_chans=self.in_chans,
+#                 embed_dim=self.embed_dims[0]
+#             )
+#
+#     @torch.no_grad()
+#     def select_roi(self, depth_mask):
+#         # depth_mask: (B,C,H,W)
+#         B, _, H, W = depth_mask.shape
+#         N = self.n_depth_levels
+#
+#         # max_val: (B,1,1,1)
+#         max_val = torch.amax(depth_mask, dim=(2, 3)).unsqueeze(-1).unsqueeze(-1)
+#
+#         # max_val_ids: (L,4), e.g., [[0,0,0,0], [0,0,0,1],..., [3,0,16,501]] (list of max_value_points)
+#         max_val_ids = (depth_mask == max_val).nonzero()
+#
+#         # format: [[(h,w) for depth_lvls] for batch], -1 (default) means not-applicable
+#         min_ids = torch.zeros(B, N, 2).long() - 1  # lower-left anchor point, (B,N,2)
+#         max_ids = torch.zeros(B, N, 2).long() - 1  # upper-right anchor point, (B,N,2)
+#         roi_regions_masks = torch.zeros(B, N, H, W)
+#
+#         for i_data in range(B):
+#             if max_val[i_data] > 0:
+#                 central_id = max_val_ids[max_val_ids[:, 0] == i_data].float().mean(dim=0).long()[2:]  # (h,w)
+#                 this_max_val = max_val[i_data].cpu().detach().item()
+#                 for i_depth in range(N - this_max_val, N):
+#                     min_id = torch.clamp(central_id - self.roi_region_sizes[i_depth] / 2, min=0, max=H).long()
+#                     max_id = torch.clamp(central_id + self.roi_region_sizes[i_depth] / 2, min=0, max=H).long()
+#                     if (min_id + self.roi_kernel_sizes[i_depth] < max_id).all():
+#                         min_ids[i_data, i_depth, :] = min_id
+#                         max_ids[i_data, i_depth, :] = max_id
+#                         roi_regions_masks[i_data, i_depth, min_id[0]:max_id[0], min_id[1]:max_id[1]] = 1
+#
+#         return roi_regions_masks, min_ids, max_ids
+#
+#     @torch.no_grad()
+#     def select_roi_simple(self, depth_mask):
+#         # depth_mask: (B,C,H,W)
+#         B, _, H, W = depth_mask.shape
+#         N = self.n_depth_levels
+#
+#         # format: [[(h,w) for depth_lvls] for batch], -1 (default) means not-applicable
+#         roi_regions_masks = torch.zeros(B, N, H, W).to(float)
+#
+#         for i_depth in range(N):
+#             roi_regions_masks[:, i_depth:, :, :] = (depth_mask >= (N - i_depth)).to(float)
+#
+#         return roi_regions_masks
+#
+#     # TODO
+#     def forward_features(self, x):
+#         depth_mask = x[:, -1]
+#         x = x[:, :3]
+#
+#         B = x.shape[0]
+#         outs = []
+#
+#         # stage 1, with RoI
+#
+#         # new
+#         roi_regions_masks = self.select_roi_simple(depth_mask)
+#         roi_embs = [None] * self.n_depth_levels
+#         roi_Hs = [-1] * self.n_depth_levels
+#         roi_Ws = [-1] * self.n_depth_levels
+#         for i_depth in range(self.n_depth_levels):
+#             roi_embs[i_depth] = x * roi_regions_masks[:, i_depth:, :, :]
+#             roi_embs[i_depth], roi_Hs[i_depth], roi_Ws[i_depth] = self.roi_patch_embeds[i_depth](roi_embs[i_depth])
+#             for i, blk in enumerate(self.block1):
+#                 roi_embs[i_depth] = blk(roi_embs[i_depth], roi_Hs[i_depth], roi_Ws[i_depth])
+#             roi_embs[i_depth] = self.norm1(x)
+#             roi_embs[i_depth] = roi_embs[i_depth].reshape(B, roi_Hs[i_depth], roi_Ws[i_depth], -1).permute(0, 3, 1,
+#                                                                                                            2).contiguous()
+#
+#         x, H, W = self.patch_embed1(x)
+#         for i, blk in enumerate(self.block1):
+#             x = blk(x, H, W)
+#         x = self.norm1(x)
+#         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+#
+#         # new
+#         for i_depth in range(self.n_depth_levels):
+#             x += F.interpolate(roi_embs[i_depth], (H, W))
+#
+#         outs.append(x)
+#
+#         # stage 2
+#         x, H, W = self.patch_embed2(x)
+#         for i, blk in enumerate(self.block2):
+#             x = blk(x, H, W)
+#         x = self.norm2(x)
+#         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+#         outs.append(x)
+#
+#         # stage 3
+#         x, H, W = self.patch_embed3(x)
+#         for i, blk in enumerate(self.block3):
+#             x = blk(x, H, W)
+#         x = self.norm3(x)
+#         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+#         outs.append(x)
+#
+#         # stage 4
+#         x, H, W = self.patch_embed4(x)
+#         for i, blk in enumerate(self.block4):
+#             x = blk(x, H, W)
+#         x = self.norm4(x)
+#         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+#         outs.append(x)
+#
+#         return outs
