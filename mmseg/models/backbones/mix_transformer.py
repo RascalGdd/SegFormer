@@ -443,6 +443,7 @@ class MyModel(MixVisionTransformer):
 
     def init_weights(self, pretrained=None):
         self.mit.init_weights(pretrained)
+        print("success!")
 
         # if isinstance(pretrained, str):
         #     logger = get_root_logger()
