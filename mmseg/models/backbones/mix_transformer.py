@@ -312,7 +312,7 @@ class MixVisionTransformer(nn.Module):
 
     def forward_features(self, x):
         print(x.dtype)
-        x = x.astype(torch.float32)
+        x = x.to(torch.float32)
         print(x.dtype)
         x = x[:, :3, :, :]
         print(x.dtype)
