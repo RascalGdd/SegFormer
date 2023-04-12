@@ -589,11 +589,11 @@ class MyModel(nn.Module):
             roi_embs_tmp = self.norm1(roi_embs_tmp)
             roi_embs_tmp = roi_embs_tmp.reshape(B, roi_H, roi_W, -1).permute(0,3,1,2).contiguous()
 
-            roi_feat_H = long(roi_H / self.roi_emb_dwnrates[i_depth])
-            roi_feat_W = long(roi_W / self.roi_emb_dwnrates[i_depth])
-            hmin_feat = long(hmin / self.roi_emb_dwnrates[i_depth])
+            roi_feat_H = int(roi_H / self.roi_emb_dwnrates[i_depth])
+            roi_feat_W = int(roi_W / self.roi_emb_dwnrates[i_depth])
+            hmin_feat = int(hmin / self.roi_emb_dwnrates[i_depth])
             hmax_feat = hmin_feat + roi_feat_H
-            wmin_feat = long(wmin / self.roi_emb_dwnrates[i_depth])
+            wmin_feat = int(wmin / self.roi_emb_dwnrates[i_depth])
             wmax_feat = wmin_feat + roi_feat_W
 
             roi_embs_tmp = F.interpolate(roi_embs_tmp, (roi_feat_H, roi_feat_W))
