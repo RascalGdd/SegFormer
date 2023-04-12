@@ -349,6 +349,8 @@ class MixVisionTransformer(nn.Module):
         return outs
 
     def forward(self, x):
+        print(x.shape)
+        x = x[:, :3, :, :]
         x = self.forward_features(x)
         # x = self.head(x)
 
@@ -423,19 +425,19 @@ class mit_b5(MixVisionTransformer):
             qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 6, 40, 3], sr_ratios=[8, 4, 2, 1],
             drop_rate=0.0, drop_path_rate=0.1)
 
-@BACKBONES.register_module()
-class MyModel(nn.Module):
-    def __init__(self, **kwargs):
-        super(MyModel, self).__init__()
-        self.mit = mit_b3()
-
-
-    def init_weights(self, pretrained=None):
-        self.mit.init_weights(pretrained)
-        print("success!")
-
-    def forward(self, x):
-        x = x[:, :3, :, :]
-        x = self.mit.forward_features(x)
-
-        return x
+# @BACKBONES.register_module()
+# class MyModel(nn.Module):
+#     def __init__(self, **kwargs):
+#         super(MyModel, self).__init__()
+#         self.mit = mit_b3()
+#
+#
+#     def init_weights(self, pretrained=None):
+#         self.mit.init_weights(pretrained)
+#         print("success!")
+#
+#     def forward(self, x):
+#         x = x[:, :3, :, :]
+#         x = self.mit.forward_features(x)
+#
+#         return x
