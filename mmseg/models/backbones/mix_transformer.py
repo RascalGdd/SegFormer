@@ -564,8 +564,8 @@ class MyModel(nn.Module):
     def generate_features(self, img, depth_map):
         x_feat, H, W = self.mit.extract_mid_feature(img)
 
-        B = x.shape[0]
-        assert B == 0, "Batch size should equal to 1"
+        B = img.shape[0]
+        assert B == 1, "Batch size should equal to 1"
 
         # stage 1, RoI part
 
@@ -579,9 +579,9 @@ class MyModel(nn.Module):
             hmax = max_ids[i_batch,i_depth,0]
             wmin = min_ids[i_batch,i_depth,1]
             wmax = max_ids[i_batch,i_depth,1]
-            roi_embs_tmp = x[0:1, :, hmin:hmax, wmin:wmax]
+            roi_embs_tmp = img[:, :, hmin:hmax, wmin:wmax]
 
-            roi_embs_tmp, roi_H, roi_W = self.roi_patch_embeds[i_depth](roi_embs[i_depth])
+            roi_embs_tmp, roi_H, roi_W = self.roi_patch_embeds[i_depth](roi_embs_tmp)
 
             for i, blk in enumerate(self.block1):
                 roi_embs_tmp = blk(roi_embs_tmp, roi_H, roi_W)
