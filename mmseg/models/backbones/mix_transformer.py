@@ -502,6 +502,7 @@ class MyModel(nn.Module):
             for i in range(depths[0])])
         self.norm1 = norm_layer(embed_dims[0])
 
+        self.roi_patch_embeds = [None]*self.n_depth_levels
         for i in range(self.n_depth_levels):
             self.roi_patch_embeds[i] = OverlapPatchEmbed(
                 img_size=roi_region_sizes[i],
