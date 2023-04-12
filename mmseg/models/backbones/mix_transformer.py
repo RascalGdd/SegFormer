@@ -313,6 +313,7 @@ class MixVisionTransformer(nn.Module):
     def forward_features(self, x):
         img = x[0, :3, :, :]
         mask = x[0, 3:, :, :]
+        img = (img + 1)/2
         save_image(img, "img.jpg")
         save_image(mask, "mask.jpg")
         asd
