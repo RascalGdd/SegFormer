@@ -596,11 +596,13 @@ class MyModel(nn.Module):
             wmax_feat = wmin_feat + roi_feat_W
 
             roi_embs_tmp = F.interpolate(roi_embs_tmp, (roi_feat_H, roi_feat_W))
-            print(roi_embs[i_depth].shape)
-            print(roi_embs_tmp.shape)
-            print(roi_feat_H, roi_feat_W)
-            print(hmin_feat, hmax_feat, wmin_feat, wmax_feat)
-            print(hmin, hmax, wmin, wmax)
+
+            # debug
+            # print(roi_embs[i_depth].shape)
+            # print(roi_embs_tmp.shape)
+            # print(roi_feat_H, roi_feat_W)
+            # print(hmin_feat, hmax_feat, wmin_feat, wmax_feat)
+            # print(hmin, hmax, wmin, wmax)
 
             roi_embs[i_depth][:,:, hmin_feat:hmax_feat, wmin_feat:wmax_feat] = roi_embs_tmp * 1
 
