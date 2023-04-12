@@ -422,3 +422,29 @@ class mit_b5(MixVisionTransformer):
             patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[4, 4, 4, 4],
             qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 6, 40, 3], sr_ratios=[8, 4, 2, 1],
             drop_rate=0.0, drop_path_rate=0.1)
+
+@BACKBONES.register_module()
+class mit_b5(MixVisionTransformer):
+    def __init__(self, **kwargs):
+        super(mit_b5, self).__init__(
+            patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[4, 4, 4, 4],
+            qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 6, 40, 3], sr_ratios=[8, 4, 2, 1],
+            drop_rate=0.0, drop_path_rate=0.1)
+
+@BACKBONES.register_module()
+class MyModel(MixVisionTransformer):
+    def __init__(self, **kwargs):
+        super(MyModel, self).__init__(
+            patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[4, 4, 4, 4],
+            qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 4, 18, 3], sr_ratios=[8, 4, 2, 1],
+            drop_rate=0.0, drop_path_rate=0.1)
+        self.mit = mit_b3()
+
+
+    def init_weights(self, pretrained=None):
+        self.mit.init_weights(pretrained)
+
+        # if isinstance(pretrained, str):
+        #     logger = get_root_logger()
+        #     load_checkpoint(self.mit, pretrained, map_location='cpu', strict=False, logger=logger)
+        #     print("success!")
