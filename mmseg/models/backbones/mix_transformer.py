@@ -510,7 +510,7 @@ class MyModel(nn.Module):
                 stride=roi_strides[i],
                 in_chans=in_chans,
                 embed_dim=embed_dims[0]
-            )
+            ).cuda()
 
     @torch.no_grad()
     def select_roi(self, depth_map):
