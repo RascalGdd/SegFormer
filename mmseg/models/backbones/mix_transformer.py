@@ -424,12 +424,9 @@ class mit_b5(MixVisionTransformer):
             drop_rate=0.0, drop_path_rate=0.1)
 
 @BACKBONES.register_module()
-class MyModel(MixVisionTransformer):
+class MyModel(nn.Module):
     def __init__(self, **kwargs):
-        super(MyModel, self).__init__(
-            patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[4, 4, 4, 4],
-            qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 4, 18, 3], sr_ratios=[8, 4, 2, 1],
-            drop_rate=0.0, drop_path_rate=0.1)
+        super(MyModel, self).__init__()
         self.mit = mit_b3()
 
 
@@ -437,7 +434,8 @@ class MyModel(MixVisionTransformer):
         self.mit.init_weights(pretrained)
         print("success!")
 
-        # if isinstance(pretrained, str):
-        #     logger = get_root_logger()
-        #     load_checkpoint(self.mit, pretrained, map_location='cpu', strict=False, logger=logger)
-        #     print("success!")
+    def forward(self, x):
+        x = x[:, :3, :, :]
+        x = self.mit.forward_features(x)
+
+        return x
