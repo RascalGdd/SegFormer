@@ -22,7 +22,7 @@ def vanishing_point_to_depth_mask(vanishing_point, image_size, level_configs = n
         x2_min = max(0, x2 - x2_bias)
         x2_max = min(W, x2 + x2_bias)
         if x2_max > 0 and x1_max > 0:
-            depth_masks[:, x1_min:x1_max, x2_min:x2_max] += 1
+            depth_masks[x1_min:x1_max, x2_min:x2_max] += 1
     depth_masks = np.asarray(depth_masks)
     return depth_masks / num_levels
 
