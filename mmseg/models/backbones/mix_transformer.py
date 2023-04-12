@@ -472,7 +472,7 @@ class mit_b5(MixVisionTransformer):
 
 @BACKBONES.register_module()
 class MyModel(nn.Module):
-    def __init__(self, embed_dims=[64, 128, 256, 512],
+    def __init__(self, embed_dims=[64, 128, 256, 512], in_chans=3,
                  num_heads=[1, 2, 4, 8], mlp_ratios=[4, 4, 4, 4], qkv_bias=False, qk_scale=None, drop_rate=0.,
                  attn_drop_rate=0., drop_path_rate=0., norm_layer=nn.LayerNorm,
                  depths=[3, 4, 6, 3], sr_ratios=[8, 4, 2, 1],
@@ -507,8 +507,8 @@ class MyModel(nn.Module):
                 img_size=roi_region_sizes[i],
                 patch_size=roi_kernel_sizes[i],
                 stride=roi_strides[i],
-                in_chans=self.in_chans,
-                embed_dim=self.embed_dims[0]
+                in_chans=in_chans,
+                embed_dim=embed_dims[0]
             )
 
     @torch.no_grad()
