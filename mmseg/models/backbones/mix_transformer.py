@@ -596,8 +596,9 @@ class MyModel(nn.Module):
             roi_feat_H = hmax_feat - hmin_feat
             roi_feat_W = wmax_feat - wmin_feat
             roi_embs_tmp = F.interpolate(roi_embs_tmp, (roi_feat_H, roi_feat_W))
+            print(roi_embs_tmp.shape)
 
-            roi_embs[i_depth][0:1,:, hmin_feat:hmax_feat, wmin_feat:wmax_feat] = roi_embs_tmp * 1
+            roi_embs[i_depth][:,:, hmin_feat:hmax_feat, wmin_feat:wmax_feat] = roi_embs_tmp * 1
 
         mid_features = []
         for i_depth in range(self.n_depth_levels):
