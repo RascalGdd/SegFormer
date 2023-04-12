@@ -311,8 +311,12 @@ class MixVisionTransformer(nn.Module):
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
     def forward_features(self, x):
+        print(x.dtype)
+        x = x.astype(torch.float32)
+        print(x.dtype)
         x = x[:, :3, :, :]
-        print(x)
+        print(x.dtype)
+        print(x.shape)
         B = x.shape[0]
         outs = []
 
