@@ -574,6 +574,7 @@ class MyModel(nn.Module):
 
         if debug:
             print(img.max(), img.min(), depth_map.max(), depth_map.min())
+            img_to_show = (img - img.min()) / img.max()
             save_image(img[0], "img_input.png")
             save_image(depth_map[0], "depth_map_input.png")
 
@@ -585,7 +586,7 @@ class MyModel(nn.Module):
             wmax = max_ids[i_batch,i_depth,1]
             roi_embs_tmp = img[:, :, hmin:hmax, wmin:wmax]
             if debug:
-                save_image(roi_embs_tmp[0], "roi_lvl_{}.png".format(i_depth))
+                save_image((roi_embs_tmp[0] - img.min()) / img.max(), "roi_lvl_{}.png".format(i_depth))
 
             roi_embs_tmp, roi_H, roi_W = self.roi_patch_embeds[i_depth](roi_embs_tmp)
 
