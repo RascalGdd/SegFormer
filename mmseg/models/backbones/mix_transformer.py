@@ -573,6 +573,7 @@ class MyModel(nn.Module):
         roi_embs = [x_feat * 0] * self.n_depth_levels
 
         if debug:
+            print(img.max(), img.min(), depth_map.max(), depth_map.min())
             save_image(img[0], "img_input.png")
             save_image(depth_map[0], "depth_map_input.png")
 
