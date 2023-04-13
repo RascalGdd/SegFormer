@@ -616,6 +616,9 @@ class MyModel(nn.Module):
         for i_depth in range(self.n_depth_levels):
             mid_features.append(F.interpolate(roi_embs[i_depth], (H, W)))
 
+        if debug:
+            qwerty
+
         return x_feat, mid_features
 
 
