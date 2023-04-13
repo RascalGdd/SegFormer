@@ -5,13 +5,16 @@ import numpy as np
 
 from ..builder import PIPELINES
 
-def vanishing_point_to_depth_mask(vanishing_point, image_size, level_configs = np.arange(0,2,0.05)):
-# vanishing_point: tuple, in pixel
+def vanishing_point_to_depth_mask(vanishing_mode, vanishing_point, image_size, level_configs = np.arange(0,2,0.05)):
+# vanishing_points: sequence of tuples, in pixel
 # image_size: tuple (H, W)
     H, W = image_size[0], image_size[1]
     num_levels = len(level_configs) + 1
     if not vanishing_point:
-        vanishing_point = [int(H/2), int(W/2)]
+        if vanishing_mode == "night":
+            vanishing_point = [int(H/2), int(W/2)]
+        elif vanishing_mode == "day":
+            vanishing_point = [int((2*H) / 3), int(W / 2)]
     depth_masks = torch.zeros(H, W, dtype=float)
     x1, x2 = int(vanishing_point[0]), int(vanishing_point[1])
     for level_scale in level_configs:
@@ -30,12 +33,10 @@ def vanishing_point_to_depth_mask(vanishing_point, image_size, level_configs = n
 @PIPELINES.register_module()
 class LoadImageFromFile(object):
     """Load an image from file.
-
     Required keys are "img_prefix" and "img_info" (a dict that must contain the
     key "filename"). Added or updated keys are "filename", "img", "img_shape",
     "ori_shape" (same as `img_shape`), "pad_shape" (same as `img_shape`),
     "scale_factor" (1.0) and "img_norm_cfg" (means=0 and stds=1).
-
     Args:
         to_float32 (bool): Whether to convert the loaded image to a float32
             numpy array. If set to False, the loaded image is an uint8 array.
@@ -62,10 +63,8 @@ class LoadImageFromFile(object):
 
     def __call__(self, results):
         """Call functions to load image and get image meta information.
-
         Args:
             results (dict): Result dict from :obj:`mmseg.CustomDataset`.
-
         Returns:
             dict: The dict contains loaded image and meta information.
         """
@@ -100,7 +99,19 @@ class LoadImageFromFile(object):
 
         # add vanishing_mask here!
 
-        vanishing_mask = vanishing_point_to_depth_mask(None, (img.shape[0], img.shape[1]))
+        if "night" in results['filename']:
+            vanishing_mode = "night"
+        else:
+            vanishing_mode = "day"
+        # with open("/cluster/work/cvl/denfan/diandian/seg/SegFormer/hello.txt", "a") as my_file:
+        #     my_file.write("file_name")
+        #     my_file.write(str(results['filename']))
+        #     my_file.write("ori_file_name")
+        #     my_file.write(str(results['ori_filename']))
+
+        if vanishing_mode == "night":
+            asd
+        vanishing_mask = vanishing_point_to_depth_mask(vanishing_mode, None, (img.shape[0], img.shape[1]))
         # results["img"] = np.concatenate((results["img"], vanishing_mask), axis=2)
         results["vanishing_mask"] = vanishing_mask
 
@@ -117,7 +128,6 @@ class LoadImageFromFile(object):
 @PIPELINES.register_module()
 class LoadAnnotations(object):
     """Load annotations for semantic segmentation.
-
     Args:
         reduce_zero_label (bool): Whether reduce all label value by 1.
             Usually used for datasets where 0 is background label.
@@ -140,10 +150,8 @@ class LoadAnnotations(object):
 
     def __call__(self, results):
         """Call function to load multiple types annotations.
-
         Args:
             results (dict): Result dict from :obj:`mmseg.CustomDataset`.
-
         Returns:
             dict: The dict contains loaded semantic segmentation annotations.
         """
