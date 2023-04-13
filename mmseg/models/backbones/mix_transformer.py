@@ -586,7 +586,7 @@ class MyModel(nn.Module):
             print(img.max(), img.min(), depth_map.max(), depth_map.min())
             img_to_show = (img - img.min()) / img.max()
             save_image(img[0], os.path.join(self.debug_dir, "{}_img_input.png".format(self.debug_counter)))
-            save_image(depth_map[0], "{}_depth_map_input.png".format(self.debug_counter))
+            save_image(depth_map[0], os.path.join(self.debug_dir, "{}_depth_map_input.png".format(self.debug_counter)))
 
         for i_depth in range(self.n_depth_levels):
             i_batch = 0
@@ -596,7 +596,10 @@ class MyModel(nn.Module):
             wmax = max_ids[i_batch,i_depth,1]
             roi_embs_tmp = img[:, :, hmin:hmax, wmin:wmax]
             if debug:
-                save_image((roi_embs_tmp[0] - img.min()) / img.max(), "{}_roi_lvl_{}.png".format(self.debug_counter, i_depth))
+                save_image(
+                    (roi_embs_tmp[0] - img.min()) / img.max(), 
+                    os.path.join(self.debug_dir, "{}_roi_lvl_{}.png".format(self.debug_counter, i_depth))
+                )
 
             roi_embs_tmp, roi_H, roi_W = self.roi_patch_embeds[i_depth](roi_embs_tmp)
 
@@ -640,6 +643,7 @@ class MyModel(nn.Module):
         x = x.to(torch.float32)
         img = x[:, :3, :, :]
         depth_map = x[:, 3, :, :].unsqueeze(1)
+        depth_map[depth_map == depth_map.max()] *= 0
         x_feat, mid_features = self.generate_features(img, depth_map)
         result = self.mit.forward_features_add_features(x_feat, mid_features)
 
