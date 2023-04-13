@@ -606,8 +606,8 @@ class MyModel(nn.Module):
             roi_embs_tmp = self.norm1(roi_embs_tmp)
             roi_embs_tmp = roi_embs_tmp.reshape(B, roi_H, roi_W, -1).permute(0, 3, 1, 2).contiguous()
 
-            roi_feat_H = int(roi_H / 4)
-            roi_feat_W = int(roi_W / 4)
+            roi_feat_H = int(roi_H / 4 * self.roi_strides[i_depth]) #debug
+            roi_feat_W = int(roi_W / 4 * self.roi_strides[i_depth])
             hmin_feat = int(hmin / 4)
             hmax_feat = hmin_feat + roi_feat_H
             wmin_feat = int(wmin / 4)
