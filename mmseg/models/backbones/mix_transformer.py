@@ -617,7 +617,7 @@ class MyModel(nn.Module):
             roi_embs[i_depth][:, :, hmin_feat:hmax_feat, wmin_feat:wmax_feat] = roi_embs_tmp
 
             if debug:
-                roi_nonzero_mask = (roi_embs[i_depth] != 0)
+                roi_nonzero_mask = (roi_embs[i_depth].sum(dim=1, keepdim=True) != 0)
                 roi_img = img_to_show_resized * roi_nonzero_mask
                 save_image(
                     roi_img,
