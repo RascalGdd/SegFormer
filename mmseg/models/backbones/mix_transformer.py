@@ -517,8 +517,8 @@ class MyModel(nn.Module):
         self.debug_counter = 0
         self.debug_dir = "debug"
         if debug:
-            if os.path.exists(self.debug_dir):
-                os.makedirs(self.debug_dir)
+            if not os.path.exists(self.debug_dir):
+                os.makedir(self.debug_dir)
 
     @torch.no_grad()
     def select_roi(self, depth_map):
