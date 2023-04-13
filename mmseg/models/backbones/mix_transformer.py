@@ -560,7 +560,7 @@ class MyModel(nn.Module):
         self.mit.init_weights(pretrained)
         print("success!")
 
-    def generate_features(self, img, depth_map):
+    def generate_features(self, img, depth_map, debug = True):
         x_feat, H, W = self.mit.extract_mid_feature(img)
 
         B = img.shape[0]
@@ -572,6 +572,10 @@ class MyModel(nn.Module):
         roi_regions_masks, min_ids, max_ids = self.select_roi(depth_map)
         roi_embs = [x_feat * 0] * self.n_depth_levels
 
+        if debug:
+            save_image(img[0], "img_input.png")
+            save_image(depth_map[0], "depth_map_input.png")
+
         for i_depth in range(self.n_depth_levels):
             i_batch = 0
             hmin = min_ids[i_batch,i_depth,0]
@@ -579,6 +583,8 @@ class MyModel(nn.Module):
             wmin = min_ids[i_batch,i_depth,1]
             wmax = max_ids[i_batch,i_depth,1]
             roi_embs_tmp = img[:, :, hmin:hmax, wmin:wmax]
+            if debug:
+                save_image(roi_embs_tmp[0], "roi_lvl_{}.png".format(i_depth))
 
             roi_embs_tmp, roi_H, roi_W = self.roi_patch_embeds[i_depth](roi_embs_tmp)
 

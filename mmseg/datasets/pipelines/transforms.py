@@ -426,9 +426,6 @@ class Resize(object):
     def _resize_seg(self, results):
         """Resize semantic segmentation map with ``results['scale']``."""
         for key in results.get('seg_fields', []):
-            # with open("/cluster/work/cvl/denfan/diandian/seg/SegFormer/hello.txt", "w") as my_file:
-            #     my_file.write(key)
-            #     my_file.write(str(results[key].shape))
             if self.keep_ratio:
                 gt_seg = mmcv.imrescale(
                     results[key], results['scale'], interpolation='nearest')
@@ -436,17 +433,6 @@ class Resize(object):
                 gt_seg = mmcv.imresize(
                     results[key], results['scale'], interpolation='nearest')
             results[key] = gt_seg
-
-    def _resize_map(self, results):
-        """Resize semantic segmentation map with ``results['scale']``."""
-        key = "vanishing_mask"
-        if self.keep_ratio:
-            map = mmcv.imrescale(
-                results[key], results['scale'], interpolation='nearest')
-        else:
-            map = mmcv.imresize(
-                results[key], results['scale'], interpolation='nearest')
-        results[key] = map
 
     def __call__(self, results):
         """Call function to resize images, bounding boxes, masks, semantic
@@ -464,7 +450,6 @@ class Resize(object):
             self._random_scale(results)
         self._resize_img(results)
         self._resize_seg(results)
-        self._resize_map(results)
         return results
 
     def __repr__(self):
@@ -525,13 +510,6 @@ class RandomFlip(object):
                 # use copy() to make numpy stride positive
                 results[key] = mmcv.imflip(
                     results[key], direction=results['flip_direction']).copy()
-
-            # flip map
-
-            key = "vanishing_mask"
-            results[key] = mmcv.imflip(
-                results[key], direction=results['flip_direction']).copy()
-
         return results
 
     def __repr__(self):
@@ -588,14 +566,6 @@ class Pad(object):
                 shape=results['pad_shape'][:2],
                 pad_val=self.seg_pad_val)
 
-    def _pad_map(self, results):
-        """Pad maps according to ``results['pad_shape']``."""
-        key = "vanishing_mask"
-        results[key] = mmcv.impad(
-            results[key],
-            shape=results['pad_shape'][:2],
-            pad_val=self.seg_pad_val)
-
     def __call__(self, results):
         """Call function to pad images, masks, semantic segmentation maps.
 
@@ -608,7 +578,6 @@ class Pad(object):
 
         self._pad_img(results)
         self._pad_seg(results)
-        self._pad_map(results)
         return results
 
     def __repr__(self):
@@ -817,11 +786,6 @@ class RandomCrop(object):
         # crop semantic seg
         for key in results.get('seg_fields', []):
             results[key] = self.crop(results[key], crop_bbox)
-
-        # crop the map
-
-        key = "vanishing_mask"
-        results[key] = self.crop(results[key], crop_bbox)
 
         return results
 
