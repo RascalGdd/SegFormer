@@ -113,8 +113,6 @@ class LoadImageFromFile(object):
         #     my_file.write("ori_file_name")
         #     my_file.write(str(results['ori_filename']))
 
-        if vanishing_mode == "night":
-            asd
         vanishing_mask = vanishing_point_to_depth_mask(vanishing_mode, None, (img.shape[0], img.shape[1]))
         # results["img"] = np.concatenate((results["img"], vanishing_mask), axis=2)
         results["vanishing_mask"] = vanishing_mask
