@@ -6,6 +6,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.transforms.functional import resize
 from functools import partial
 import os
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
@@ -578,6 +579,7 @@ class MyModel(nn.Module):
 
         debug = self.debug
         if debug:
+            img_to_show_resized = resize((img - img.min()) / img.max(), [H, W])
             print(img.max(), img.min(), depth_map.max(), depth_map.min())
             img_to_show = (img - img.min()) / img.max()
             save_image(img[0], os.path.join(self.debug_dir, "{}_img_input.png".format(self.debug_counter)))
@@ -612,8 +614,15 @@ class MyModel(nn.Module):
             wmax_feat = wmin_feat + roi_feat_W
 
             roi_embs_tmp = F.interpolate(roi_embs_tmp, (roi_feat_H, roi_feat_W))
-
             roi_embs[i_depth][:, :, hmin_feat:hmax_feat, wmin_feat:wmax_feat] = roi_embs_tmp
+
+            if debug:
+                roi_nonzero_mask = (roi_embs[i_depth] != 0)
+                roi_img = img_to_show_resized * roi_nonzero_mask
+                save_image(
+                    roi_img,
+                    os.path.join(self.debug_dir, "{}_roi_masked_lvl_{}.png".format(self.debug_counter, i_depth))
+                )
 
         mid_features = []
         for i_depth in range(self.n_depth_levels):
