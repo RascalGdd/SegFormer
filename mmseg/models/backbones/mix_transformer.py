@@ -3,6 +3,7 @@
 #
 # This work is licensed under the NVIDIA Source Code License
 # ---------------------------------------------------------------
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -476,7 +477,7 @@ class MyModel(nn.Module):
                  num_heads=[1, 2, 4, 8], mlp_ratios=[4, 4, 4, 4], qkv_bias=False, qk_scale=None, drop_rate=0.,
                  attn_drop_rate=0., drop_path_rate=0., norm_layer=nn.LayerNorm,
                  depths=[3, 4, 6, 3], sr_ratios=[8, 4, 2, 1],
-                 roi_region_sizes=[64, 128, 256], roi_kernel_sizes=[1, 3, 5], roi_strides=[1, 1, 2], **kwargs):
+                 roi_region_sizes=[64, 128, 256], roi_kernel_sizes=[1, 3, 5], roi_strides=[1, 1, 2], debug = True, **kwargs):
         super(MyModel, self).__init__()
         self.mit = mit_b3()
 
@@ -510,6 +511,14 @@ class MyModel(nn.Module):
                 in_chans=in_chans,
                 embed_dim=embed_dims[0]
             ).cuda()
+
+        self.debug = debug
+        self.debug_nums = 20
+        self.debug_counter = 0
+        self.debug_dir = "debug"
+        if debug:
+            if os.path.exists(path):
+                os.makedirs(self.debug_dir)
 
     @torch.no_grad()
     def select_roi(self, depth_map):
@@ -560,7 +569,7 @@ class MyModel(nn.Module):
         self.mit.init_weights(pretrained)
         print("success!")
 
-    def generate_features(self, img, depth_map, debug = True):
+    def generate_features(self, img, depth_map):
         x_feat, H, W = self.mit.extract_mid_feature(img)
 
         B = img.shape[0]
@@ -572,11 +581,12 @@ class MyModel(nn.Module):
         roi_regions_masks, min_ids, max_ids = self.select_roi(depth_map)
         roi_embs = [x_feat * 0] * self.n_depth_levels
 
+        debug = self.debug
         if debug:
             print(img.max(), img.min(), depth_map.max(), depth_map.min())
             img_to_show = (img - img.min()) / img.max()
-            save_image(img[0], "img_input.png")
-            save_image(depth_map[0], "depth_map_input.png")
+            save_image(img[0], os.path.join(self.debug_dir, "{}_img_input.png".format(self.debug_counter)))
+            save_image(depth_map[0], "{}_depth_map_input.png".format(self.debug_counter))
 
         for i_depth in range(self.n_depth_levels):
             i_batch = 0
@@ -586,7 +596,7 @@ class MyModel(nn.Module):
             wmax = max_ids[i_batch,i_depth,1]
             roi_embs_tmp = img[:, :, hmin:hmax, wmin:wmax]
             if debug:
-                save_image((roi_embs_tmp[0] - img.min()) / img.max(), "roi_lvl_{}.png".format(i_depth))
+                save_image((roi_embs_tmp[0] - img.min()) / img.max(), "{}_roi_lvl_{}.png".format(self.debug_counter, i_depth))
 
             roi_embs_tmp, roi_H, roi_W = self.roi_patch_embeds[i_depth](roi_embs_tmp)
 
@@ -619,7 +629,9 @@ class MyModel(nn.Module):
             mid_features.append(F.interpolate(roi_embs[i_depth], (H, W)))
 
         if debug:
-            qwerty
+            self.debug_counter += 1
+            if self.debug_counter >= self.debug_nums:
+                debug_checkpoint_break
 
         return x_feat, mid_features
 
