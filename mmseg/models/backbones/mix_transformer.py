@@ -6,6 +6,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.transforms.functional import resize
 from functools import partial
 import os
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
@@ -517,16 +518,6 @@ class MyModel(nn.Module):
             if not os.path.exists(self.debug_dir):
                 os.mkdir(self.debug_dir)
 
-        # self.roi_patch_embeds = [None]*self.n_depth_levels
-        # for i in range(self.n_depth_levels):
-        #     self.roi_patch_embeds[i] = OverlapPatchEmbed(
-        #         img_size=roi_region_sizes[i],
-        #         patch_size=roi_kernel_sizes[i],
-        #         stride=roi_strides[i],
-        #         in_chans=in_chans,
-        #         embed_dim=embed_dims[0]
-        #     ).cuda()
-
     @torch.no_grad()
     def select_roi(self, depth_map):
         roi_region_sizes = self.roi_region_sizes
@@ -588,6 +579,7 @@ class MyModel(nn.Module):
 
         debug = self.debug
         if debug:
+            img_to_show_resized = resize((img - img.min()) / img.max(), [H, W])
             print(img.max(), img.min(), depth_map.max(), depth_map.min())
             img_to_show = (img - img.min()) / img.max()
             save_image(img[0], os.path.join(self.debug_dir, "{}_img_input.png".format(self.debug_counter)))
@@ -614,16 +606,23 @@ class MyModel(nn.Module):
             roi_embs_tmp = self.norm1(roi_embs_tmp)
             roi_embs_tmp = roi_embs_tmp.reshape(B, roi_H, roi_W, -1).permute(0, 3, 1, 2).contiguous()
 
-            roi_feat_H = int(roi_H / 4)
-            roi_feat_W = int(roi_W / 4)
+            roi_feat_H = int(roi_H / 4 * self.roi_strides[i_depth]) #debug
+            roi_feat_W = int(roi_W / 4 * self.roi_strides[i_depth])
             hmin_feat = int(hmin / 4)
             hmax_feat = hmin_feat + roi_feat_H
             wmin_feat = int(wmin / 4)
             wmax_feat = wmin_feat + roi_feat_W
 
             roi_embs_tmp = F.interpolate(roi_embs_tmp, (roi_feat_H, roi_feat_W))
-
             roi_embs[i_depth][:, :, hmin_feat:hmax_feat, wmin_feat:wmax_feat] = roi_embs_tmp
+
+            if debug:
+                roi_nonzero_mask = (roi_embs[i_depth].sum(dim=1, keepdim=True) != 0)
+                roi_img = img_to_show_resized * roi_nonzero_mask
+                save_image(
+                    roi_img,
+                    os.path.join(self.debug_dir, "{}_roi_masked_lvl_{}.png".format(self.debug_counter, i_depth))
+                )
 
         mid_features = []
         for i_depth in range(self.n_depth_levels):
