@@ -5,8 +5,8 @@ import numpy as np
 
 from ..builder import PIPELINES
 
-def vanishing_point_to_depth_mask(vanishing_point, image_size, level_configs = np.arange(0,2,0.05)):
-# vanishing_points: sequence of tuples, in pixel
+def vanishing_point_to_depth_mask(vanishing_point, image_size, level_configs = np.arange(0,10,0.05)):
+# vanishing_point: tuple, in pixel
 # image_size: tuple (H, W)
     H, W = image_size[0], image_size[1]
     num_levels = len(level_configs) + 1
