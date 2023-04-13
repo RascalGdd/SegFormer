@@ -477,7 +477,7 @@ class MyModel(nn.Module):
                  num_heads=[1, 2, 4, 8], mlp_ratios=[4, 4, 4, 4], qkv_bias=False, qk_scale=None, drop_rate=0.,
                  attn_drop_rate=0., drop_path_rate=0., norm_layer=nn.LayerNorm,
                  depths=[3, 4, 6, 3], sr_ratios=[8, 4, 2, 1],
-                 roi_region_sizes=[64, 128, 256], roi_kernel_sizes=[1, 3, 5], roi_strides=[1, 1, 2], debug = True, **kwargs):
+                 roi_region_sizes=[64, 128, 256], roi_kernel_sizes=[1, 3, 5], roi_strides=[1, 1, 2], debug = False, **kwargs):
         super(MyModel, self).__init__()
         self.mit = mit_b3()
 
@@ -619,11 +619,12 @@ class MyModel(nn.Module):
             roi_embs_tmp = F.interpolate(roi_embs_tmp, (roi_feat_H, roi_feat_W))
 
             # debug
-            # print(roi_embs[i_depth].shape)
-            # print(roi_embs_tmp.shape)
-            # print(roi_feat_H, roi_feat_W)
-            # print(hmin_feat, hmax_feat, wmin_feat, wmax_feat)
-            # print(hmin, hmax, wmin, wmax)
+            if self.debug_counter == 0:
+                print(roi_embs[i_depth].shape)
+                print(roi_embs_tmp.shape)
+                print(roi_feat_H, roi_feat_W)
+                print(hmin_feat, hmax_feat, wmin_feat, wmax_feat)
+                print(hmin, hmax, wmin, wmax)
 
             roi_embs[i_depth][:,:, hmin_feat:hmax_feat, wmin_feat:wmax_feat] = roi_embs_tmp * 1
 
