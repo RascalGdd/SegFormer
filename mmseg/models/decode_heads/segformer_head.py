@@ -43,7 +43,7 @@ class SegFormerHead(BaseDecodeHead):
         self.feature_strides = feature_strides
         self.n_depth_levels = n_depth_levels # cat
 
-        c1_in_channels, c2_in_channels, c3_in_channels, c4_in_channels = self.in_channels
+        c1_in_channels, c2_in_channels, c3_in_channels, c4_in_channels, *other = self.in_channels
 
         decoder_params = kwargs['decoder_params']
         embedding_dim = decoder_params['embed_dim']
