@@ -69,8 +69,6 @@ class SegFormerHead(BaseDecodeHead):
         c1, c2, c3, c4 = x[0:4]
         cs_roi = x[4:4+self.n_depth_levels]
 
-        print(len(inputs), len(x), len(cs_roi))
-
         ############## MLP decoder on C1-C4 ###########
         n, _, h, w = c4.shape
 
