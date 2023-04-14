@@ -334,9 +334,6 @@ class MixVisionTransformer(nn.Module):
 
         outs.append(x)
 
-        for i_depth in range(n_depth_levels):
-            outs.append(mid_features[i_depth])
-
         # stage 2
         x, H, W = self.patch_embed2(x)
         for i, blk in enumerate(self.block2):
@@ -360,6 +357,10 @@ class MixVisionTransformer(nn.Module):
         x = self.norm4(x)
         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
         outs.append(x)
+
+        # roi feats
+        for i_depth in range(n_depth_levels):
+            outs.append(mid_features[i_depth])
 
         return outs
 
