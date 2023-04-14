@@ -477,7 +477,7 @@ class mit_b5(MixVisionTransformer):
             drop_rate=0.0, drop_path_rate=0.1)
 
 @BACKBONES.register_module()
-class MyModelCat(nn.Module):
+class MyModel(nn.Module):
     def __init__(self, embed_dims=[64, 128, 256, 512], in_chans=3,
                  num_heads=[1, 2, 4, 8], mlp_ratios=[4, 4, 4, 4], qkv_bias=False, qk_scale=None, drop_rate=0.,
                  attn_drop_rate=0., drop_path_rate=0., norm_layer=nn.LayerNorm,
