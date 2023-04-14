@@ -327,10 +327,15 @@ class MixVisionTransformer(nn.Module):
 
         # stage 1
         n_depth_levels = len(mid_features)
-        for i_depth in range(n_depth_levels):
-            x += mid_features[i_depth]
+
+        # cat, no addition
+        # for i_depth in range(n_depth_levels):
+        #     x += mid_features[i_depth]
 
         outs.append(x)
+
+        for i_depth in range(n_depth_levels):
+            outs.append(mid_features[i_depth])
 
         # stage 2
         x, H, W = self.patch_embed2(x)
@@ -472,7 +477,7 @@ class mit_b5(MixVisionTransformer):
             drop_rate=0.0, drop_path_rate=0.1)
 
 @BACKBONES.register_module()
-class MyModel(nn.Module):
+class MyModelCat(nn.Module):
     def __init__(self, embed_dims=[64, 128, 256, 512], in_chans=3,
                  num_heads=[1, 2, 4, 8], mlp_ratios=[4, 4, 4, 4], qkv_bias=False, qk_scale=None, drop_rate=0.,
                  attn_drop_rate=0., drop_path_rate=0., norm_layer=nn.LayerNorm,
