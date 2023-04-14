@@ -486,6 +486,7 @@ class MyModel(nn.Module):
                  roi_region_sizes=[64, 128, 256], roi_kernel_sizes=[1, 3, 5], roi_strides=[1, 1, 2], debug=False, **kwargs):
         super(MyModel, self).__init__()
         self.mit = mit_b3()
+        self.embed_dims = embed_dims
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
         cur = 0
@@ -586,7 +587,7 @@ class MyModel(nn.Module):
 
         # new
         roi_regions_masks, min_ids, max_ids = self.select_roi(depth_map)
-        roi_embs = [torch.zeros_like(x_feat) for i in range(self.n_depth_levels)]
+        roi_embs = [torch.zeros_like(img[:,0:1,:,:]).repeat(1,self.embed_dims[0],1,1) for i in range(self.n_depth_levels)] # ori-size
 
         debug = self.debug
         if debug:
@@ -617,11 +618,11 @@ class MyModel(nn.Module):
             roi_embs_tmp = self.norm1(roi_embs_tmp)
             roi_embs_tmp = roi_embs_tmp.reshape(B, roi_H, roi_W, -1).permute(0, 3, 1, 2).contiguous()
 
-            roi_feat_H = int(roi_H / 4 * self.roi_strides[i_depth]) #debug
-            roi_feat_W = int(roi_W / 4 * self.roi_strides[i_depth])
-            hmin_feat = int(hmin / 4)
+            roi_feat_H = int(roi_H * self.roi_strides[i_depth]) #debug, ori-size
+            roi_feat_W = int(roi_W * self.roi_strides[i_depth])
+            hmin_feat = hmin
             hmax_feat = hmin_feat + roi_feat_H
-            wmin_feat = int(wmin / 4)
+            wmin_feat = wmin
             wmax_feat = wmin_feat + roi_feat_W
 
             roi_embs_tmp = F.interpolate(roi_embs_tmp, (roi_feat_H, roi_feat_W))

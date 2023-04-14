@@ -73,15 +73,16 @@ class SegFormerHead(BaseDecodeHead):
         n, _, h, w = c4.shape
 
         _c4 = self.linear_c4(c4).permute(0,2,1).reshape(n, -1, c4.shape[2], c4.shape[3])
-        _c4 = resize(_c4, size=c1.size()[2:],mode='bilinear',align_corners=False)
+        _c4 = resize(_c4, size=cs_roi[0].size()[2:],mode='bilinear',align_corners=False) # roi
 
         _c3 = self.linear_c3(c3).permute(0,2,1).reshape(n, -1, c3.shape[2], c3.shape[3])
-        _c3 = resize(_c3, size=c1.size()[2:],mode='bilinear',align_corners=False)
+        _c3 = resize(_c3, size=cs_roi[0].size()[2:],mode='bilinear',align_corners=False)
 
         _c2 = self.linear_c2(c2).permute(0,2,1).reshape(n, -1, c2.shape[2], c2.shape[3])
-        _c2 = resize(_c2, size=c1.size()[2:],mode='bilinear',align_corners=False)
+        _c2 = resize(_c2, size=cs_roi[0].size()[2:],mode='bilinear',align_corners=False)
 
         _c1 = self.linear_c1(c1).permute(0,2,1).reshape(n, -1, c1.shape[2], c1.shape[3])
+        _c1 = resize(_c1, size=cs_roi[0].size()[2:],mode='bilinear',align_corners=False)
 
         # cat roi
         _cs_roi = []
