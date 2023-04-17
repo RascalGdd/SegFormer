@@ -29,7 +29,7 @@ model = dict(
     # model training and testing settings
     train_cfg=dict(),
     # test_cfg=dict(mode='whole'))
-    test_cfg=dict(mode='slide', crop_size=(1024/2,1024/2), stride=(768/2,768/2))) # modified
+    test_cfg=dict(mode='slide', crop_size=(1024//2,1024//2), stride=(768//2,768//2))) # modified
 
 # data
 data = dict(samples_per_gpu=1)
