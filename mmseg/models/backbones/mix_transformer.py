@@ -360,7 +360,7 @@ class MixVisionTransformer(nn.Module):
 
         # roi feats
         for i_depth in range(n_depth_levels):
-            outs.append(mid_features[i_depth]*0) #debug
+            outs.append(mid_features[i_depth])
 
         return outs
 
