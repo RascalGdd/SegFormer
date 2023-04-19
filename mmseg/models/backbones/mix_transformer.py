@@ -117,6 +117,46 @@ class Attention(nn.Module):
 
         return x
 
+# new, from https://github.com/rishikksh20/CrossViT-pytorch/blob/master/module.py
+class CrossAttention(nn.Module):
+    def __init__(self, dim, heads = 8, dim_head = 64, dropout = 0.):
+        super().__init__()
+        inner_dim = dim_head *  heads
+        project_out = not (heads == 1 and dim_head == dim)
+
+        self.heads = heads
+        self.scale = dim_head ** -0.5
+
+        self.to_k = nn.Linear(dim, inner_dim , bias=False)
+        self.to_v = nn.Linear(dim, inner_dim , bias=False)
+        self.to_q = nn.Linear(dim, inner_dim, bias=False)
+
+        self.to_out = nn.Sequential(
+            nn.Linear(inner_dim, dim),
+            nn.Dropout(dropout)
+        ) if project_out else nn.Identity()
+
+    def forward(self, x_q, x_kv):
+        b, n1, _, h = *x_kv.shape, self.heads
+        b, n2, _ = *x_q.shape
+
+        k = self.to_k(x_kv)
+        k = rearrange(k, 'b n1 (h d) -> b h n1 d', h = h)
+
+        v = self.to_v(x_kv)
+        v = rearrange(v, 'b n1 (h d) -> b h n1 d', h = h)
+
+        q = self.to_q(x_q)
+        q = rearrange(q, 'b n2 (h d) -> b h n2 d', h = h)
+
+        dots = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
+        attn = dots.softmax(dim=-1)
+
+        out = einsum('b h i j, b h j d -> b h i d', attn, v)
+        out = rearrange(out, 'b h n d -> b n (h d)')
+        out =  self.to_out(out)
+        return out
+
 
 class Block(nn.Module):
 
@@ -157,6 +197,42 @@ class Block(nn.Module):
 
         return x
 
+# new
+class CrossBlock(nn.Module):
+    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
+                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm, sr_ratio=1):
+        super().__init__()
+        self.norm1_q = norm_layer(dim)
+        self.norm1_kv = norm_layer(dim)
+        self.cross_attn = CrossAttention(dim, heads = num_heads, dim_head = dim, dropout = drop)
+        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.norm2 = norm_layer(dim)
+        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv2d):
+            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            fan_out //= m.groups
+            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+            if m.bias is not None:
+                m.bias.data.zero_()
+
+    def forward(self, x_q, x_kv, H, W):
+        x = x_q + self.drop_path(self.attn(self.norm1_q(x_q), self.norm1_q(x_kv)))
+        x = x + self.drop_path(self.mlp(self.norm2(x), H, W))
+
+        return x
 
 class OverlapPatchEmbed(nn.Module):
     """ Image to Patch Embedding
@@ -318,20 +394,14 @@ class MixVisionTransformer(nn.Module):
         for i, blk in enumerate(self.block1):
             x = blk(x, H, W)
         x = self.norm1(x)
-        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+        # x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous() # changed: resize after cross attn
         return x, H, W
 
-    def forward_features_add_features(self, x, mid_features):
+    def forward_features_add_features(self, x):
         B = x.shape[0]
         outs = []
 
         # stage 1
-        n_depth_levels = len(mid_features)
-
-        # cat, no addition
-        # for i_depth in range(n_depth_levels):
-        #     x += mid_features[i_depth]
-
         outs.append(x)
 
         # stage 2
@@ -357,10 +427,6 @@ class MixVisionTransformer(nn.Module):
         x = self.norm4(x)
         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
         outs.append(x)
-
-        # roi feats
-        for i_depth in range(n_depth_levels):
-            outs.append(mid_features[i_depth])
 
         return outs
 
@@ -501,7 +567,7 @@ class MyModel(nn.Module):
         self.roi_kernel_sizes = roi_kernel_sizes
         self.roi_strides = roi_strides
 
-        self.block1 = nn.ModuleList([Block(
+        self.block_cross = nn.ModuleList([CrossBlock(
             dim=embed_dims[0], num_heads=num_heads[0], mlp_ratio=mlp_ratios[0], qkv_bias=qkv_bias, qk_scale=qk_scale,
             drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[cur + i], norm_layer=norm_layer,
             sr_ratio=sr_ratios[0])
@@ -585,8 +651,7 @@ class MyModel(nn.Module):
         # stage 1, RoI part
 
         # new
-        roi_regions_masks, min_ids, max_ids = self.select_roi(depth_map)
-        roi_embs = [torch.zeros_like(x_feat) for i in range(self.n_depth_levels)]
+        _, min_ids, max_ids = self.select_roi(depth_map)
 
         debug = self.debug
         if debug:
@@ -610,41 +675,17 @@ class MyModel(nn.Module):
                 )
 
             roi_embs_tmp, roi_H, roi_W = self.roi_patch_embeds[i_depth](roi_embs_tmp)
-
-            for i, blk in enumerate(self.block1):
-                roi_embs_tmp = blk(roi_embs_tmp, roi_H, roi_W)
-
-            roi_embs_tmp = self.norm1(roi_embs_tmp)
-            roi_embs_tmp = roi_embs_tmp.reshape(B, roi_H, roi_W, -1).permute(0, 3, 1, 2).contiguous()
-
-            roi_feat_H = int(roi_H / 4 * self.roi_strides[i_depth]) #debug
-            roi_feat_W = int(roi_W / 4 * self.roi_strides[i_depth])
-            hmin_feat = int(hmin / 4)
-            hmax_feat = hmin_feat + roi_feat_H
-            wmin_feat = int(wmin / 4)
-            wmax_feat = wmin_feat + roi_feat_W
-
-            roi_embs_tmp = F.interpolate(roi_embs_tmp, (roi_feat_H, roi_feat_W))
-            roi_embs[i_depth][:, :, hmin_feat:hmax_feat, wmin_feat:wmax_feat] = roi_embs_tmp
-
-            if debug:
-                roi_nonzero_mask = (roi_embs[i_depth].sum(dim=1, keepdim=True) != 0)
-                roi_img = img_to_show_resized * roi_nonzero_mask
-                save_image(
-                    roi_img,
-                    os.path.join(self.debug_dir, "{}_roi_masked_lvl_{}.png".format(self.debug_counter, i_depth))
-                )
-
-        mid_features = []
-        for i_depth in range(self.n_depth_levels):
-            mid_features.append(roi_embs[i_depth])
+            for i, blk in enumerate(self.block_cross):
+                x_feat = blk(x_feat, roi_embs_tmp, H, W)
+            x_feat = self.norm1(x_feat)
 
         if debug:
             self.debug_counter += 1
             if self.debug_counter >= self.debug_nums:
                 debug_checkpoint_break
 
-        return x_feat, mid_features
+        x_feat = x_feat.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+        return x_feat
 
 
     def forward(self, x):
@@ -652,7 +693,7 @@ class MyModel(nn.Module):
         img = x[:, :3, :, :]
         depth_map = x[:, 3, :, :].unsqueeze(1)
         depth_map[depth_map == depth_map.max()] *= 0
-        x_feat, mid_features = self.generate_features(img, depth_map)
-        result = self.mit.forward_features_add_features(x_feat, mid_features)
+        x_feat = self.generate_features(img, depth_map)
+        result = self.mit.forward_features_add_features(x_feat)
 
         return result
