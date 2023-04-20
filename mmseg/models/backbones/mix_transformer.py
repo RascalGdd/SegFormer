@@ -151,10 +151,10 @@ class CrossAttention(nn.Module):
         q = self.to_q(x_q)
         q = rearrange(q, 'b n2 (h d) -> b h n2 d', h = h)
 
-        dots = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
+        dots = einsum(q, k, 'b h i d, b h j d -> b h i j') * self.scale
         attn = dots.softmax(dim=-1)
 
-        out = einsum('b h i j, b h j d -> b h i d', attn, v)
+        out = einsum(attn, v, 'b h i j, b h j d -> b h i d')
         out = rearrange(out, 'b h n d -> b n (h d)')
         out =  self.to_out(out)
         return out
