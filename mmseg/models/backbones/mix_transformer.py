@@ -230,7 +230,7 @@ class CrossBlock(nn.Module):
                 m.bias.data.zero_()
 
     def forward(self, x_q, x_kv, H, W):
-        x = x_q + self.drop_path(self.attn(self.norm1_q(x_q), self.norm1_q(x_kv)))
+        x = x_q + self.drop_path(self.cross_attn(self.norm1_q(x_q), self.norm1_q(x_kv)))
         x = x + self.drop_path(self.mlp(self.norm2(x), H, W))
 
         return x
