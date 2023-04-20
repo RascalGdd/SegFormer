@@ -137,8 +137,9 @@ class CrossAttention(nn.Module):
         ) if project_out else nn.Identity()
 
     def forward(self, x_q, x_kv):
-        b, n1, _, h = *x_kv.shape, self.heads
-        b, n2, _ = *x_q.shape
+        b, n1, _, _ = x_kv.shape, 
+        h = self.heads
+        b, n2, _, _ = *x_q.shape
 
         k = self.to_k(x_kv)
         k = rearrange(k, 'b n1 (h d) -> b h n1 d', h = h)
