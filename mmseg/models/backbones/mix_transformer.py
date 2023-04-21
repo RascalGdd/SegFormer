@@ -579,9 +579,17 @@ class MyModel(nn.Module):
                  attn_drop_rate=0., drop_path_rate=0., norm_layer=nn.LayerNorm,
                  depths=[3, 4, 6, 3], sr_ratios=[8, 4, 2, 1],
                  roi_region_sizes=[64, 128, 256], roi_kernel_sizes=[1, 3, 5], roi_strides=[1, 1, 2], 
-                 roi_sr_ratios = [1,2,2], debug=False, **kwargs):
+                 roi_sr_ratios = [1,2,2], fix_param=True, debug=False, **kwargs):
         super(MyModel, self).__init__()
         self.mit = mit_b3()
+        if fix_param:
+            for param in self.mit.parameters():
+                    param.requires_grad = False
+
+            for param in self.mit.patch_embed1.parameters():
+                    param.requires_grad = True
+            for param in self.mit.block1.parameters():
+                    param.requires_grad = True
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
         cur = 0
@@ -632,12 +640,12 @@ class MyModel(nn.Module):
         max_val = torch.amax(depth_map, dim=(2, 3)).unsqueeze(-1).unsqueeze(-1)
 
         # max_val_ids: (L,4), e.g., [[0,0,0,0], [0,0,0,1],..., [3,0,16,501]] (list of max_value_points)
-        max_val_ids = (depth_map == max_val).nonzero()
+        max_val_ids = (depth_map == max_val).nonzero(as_tuple = False)
 
         # format: [[(h,w) for depth_lvls] for batch], -1 (default) means not-applicable
         min_ids = torch.zeros(B, N, 2).long() - 1  # lower-left anchor point, (B,N,2)
         max_ids = torch.zeros(B, N, 2).long() - 1  # upper-right anchor point, (B,N,2)
-        roi_regions_masks = torch.zeros(B, N, H, W)
+        # roi_regions_masks = torch.zeros(B, N, H, W)
 
         for i_data in range(B):
             central_id = max_val_ids[max_val_ids[:, 0] == i_data].float().mean(dim=0).long()[2:]  # (h,w)
@@ -663,9 +671,9 @@ class MyModel(nn.Module):
                 if (min_id + roi_kernel_sizes[i_depth] < max_id).all():
                     min_ids[i_data, i_depth, :] = min_id
                     max_ids[i_data, i_depth, :] = max_id
-                    roi_regions_masks[i_data, i_depth, min_id[0]:max_id[0], min_id[1]:max_id[1]] = 1
+                    # roi_regions_masks[i_data, i_depth, min_id[0]:max_id[0], min_id[1]:max_id[1]] = 1
 
-        return roi_regions_masks, min_ids, max_ids
+        return min_ids, max_ids # roi_regions_masks, min_ids, max_ids
 
     def init_weights(self, pretrained=None):
         self.mit.init_weights(pretrained)
@@ -680,7 +688,7 @@ class MyModel(nn.Module):
         # stage 1, RoI part
 
         # new
-        _, min_ids, max_ids = self.select_roi(depth_map)
+        min_ids, max_ids = self.select_roi(depth_map)
 
         debug = self.debug
         if debug:
