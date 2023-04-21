@@ -118,47 +118,69 @@ class Attention(nn.Module):
 
         return x
 
-# new, from https://github.com/rishikksh20/CrossViT-pytorch/blob/master/module.py
+# new
 class CrossAttention(nn.Module):
-    def __init__(self, dim, heads = 8, dim_head = 64, dropout = 0.):
+    def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0., sr_ratio=1):
         super().__init__()
-        inner_dim = dim_head *  heads
-        project_out = not (heads == 1 and dim_head == dim)
+        assert dim % num_heads == 0, f"dim {dim} should be divided by num_heads {num_heads}."
 
-        self.heads = heads
-        self.scale = dim_head ** -0.5
+        self.dim = dim
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = qk_scale or head_dim ** -0.5
 
-        self.to_k = nn.Linear(dim, inner_dim , bias=False)
-        self.to_v = nn.Linear(dim, inner_dim , bias=False)
-        self.to_q = nn.Linear(dim, inner_dim, bias=False)
+        self.q = nn.Linear(dim, dim, bias=qkv_bias)
+        self.kv = nn.Linear(dim, dim * 2, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
 
-        self.to_out = nn.Sequential(
-            nn.Linear(inner_dim, dim),
-            nn.Dropout(dropout)
-        ) if project_out else nn.Identity()
+        self.sr_ratio = sr_ratio
+        if sr_ratio > 1:
+            self.sr = nn.Conv2d(dim, dim, kernel_size=sr_ratio, stride=sr_ratio)
+            self.norm = nn.LayerNorm(dim)
 
-    def forward(self, x_q, x_kv):
-        b, n1, _ = x_kv.shape
-        h = self.heads
-        b, n2, _ = x_q.shape
+        self.apply(self._init_weights)
 
-        k = self.to_k(x_kv)
-        k = rearrange(k, 'b n1 (h d) -> b h n1 d', h = h)
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv2d):
+            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            fan_out //= m.groups
+            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+            if m.bias is not None:
+                m.bias.data.zero_()
 
-        v = self.to_v(x_kv)
-        v = rearrange(v, 'b n1 (h d) -> b h n1 d', h = h)
+    def forward(self, x_q, x_kv, H_q, W_q, H_kv, W_kv):
+        B, N_q, C_q = x_q.shape
+        B, N_kv, C_kv = x_kv.shape
 
-        q = self.to_q(x_q)
-        q = rearrange(q, 'b n2 (h d) -> b h n2 d', h = h)
+        q = self.q(x).reshape(B, N_q, self.num_heads, C_q // self.num_heads).permute(0, 2, 1, 3)
 
-        dots = einsum(q, k, 'b h i d, b h j d -> b h i j') * self.scale
-        attn = dots.softmax(dim=-1)
+        if self.sr_ratio > 1:
+            x_kv_ = x_kv.permute(0, 2, 1).reshape(B, C_kv, H_kv, W_kv)
+            x_kv_ = self.sr(x_kv_).reshape(B, C_kv, -1).permute(0, 2, 1)
+            x_kv_ = self.norm(x_kv_)
+            kv = self.kv(x_kv_).reshape(B, -1, 2, self.num_heads, C_kv // self.num_heads).permute(2, 0, 3, 1, 4)
+        else:
+            kv = self.kv(x_kv_).reshape(B, -1, 2, self.num_heads, C_kv // self.num_heads).permute(2, 0, 3, 1, 4)
+        k, v = kv[0], kv[1]
 
-        out = einsum(attn, v, 'b h i j, b h j d -> b h i d')
-        out = rearrange(out, 'b h n d -> b n (h d)')
-        out =  self.to_out(out)
-        return out
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
 
+        x = (attn @ v).transpose(1, 2).reshape(B, N_q, C_q)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+
+        return x
 
 class Block(nn.Module):
 
@@ -206,7 +228,10 @@ class CrossBlock(nn.Module):
         super().__init__()
         self.norm1_q = norm_layer(dim)
         self.norm1_kv = norm_layer(dim)
-        self.cross_attn = CrossAttention(dim, heads = num_heads, dim_head = dim, dropout = drop)
+        self.cross_attn = CrossAttention(
+            dim,
+            num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
+            attn_drop=attn_drop, proj_drop=drop, sr_ratio=sr_ratio)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
@@ -230,9 +255,11 @@ class CrossBlock(nn.Module):
             if m.bias is not None:
                 m.bias.data.zero_()
 
-    def forward(self, x_q, x_kv, H, W):
-        x = x_q + self.drop_path(self.cross_attn(self.norm1_q(x_q), self.norm1_q(x_kv)))
-        x = x + self.drop_path(self.mlp(self.norm2(x), H, W))
+    def forward(self, x_q, x_kv, H_q, W_q, H_kv, W_kv):
+        x = x_q + self.drop_path(
+            self.cross_attn(self.norm1_q(x_q), self.norm1_kv(x_kv), H_q, W_q, H_kv, W_kv)
+        )
+        x = x + self.drop_path(self.mlp(self.norm2(x), H_q, W_q))
 
         return x
 
@@ -551,7 +578,8 @@ class MyModel(nn.Module):
                  num_heads=[1, 2, 4, 8], mlp_ratios=[4, 4, 4, 4], qkv_bias=False, qk_scale=None, drop_rate=0.,
                  attn_drop_rate=0., drop_path_rate=0., norm_layer=nn.LayerNorm,
                  depths=[3, 4, 6, 3], sr_ratios=[8, 4, 2, 1],
-                 roi_region_sizes=[64, 128, 256], roi_kernel_sizes=[1, 3, 5], roi_strides=[1, 1, 2], debug=False, **kwargs):
+                 roi_region_sizes=[64, 128, 256], roi_kernel_sizes=[1, 3, 5], roi_strides=[1, 1, 2], 
+                 roi_sr_ratios = [1,2,2], debug=False, **kwargs):
         super(MyModel, self).__init__()
         self.mit = mit_b3()
 
@@ -560,7 +588,6 @@ class MyModel(nn.Module):
 
         # RoI embeds, only for pixel_level (the same role as patch_embed1)
         self.n_depth_levels = len(roi_region_sizes)
-        self.roi_embeds = [None] * len(roi_region_sizes)
 
         assert self.n_depth_levels == len(roi_kernel_sizes), "RoI levels should match"
         assert self.n_depth_levels == len(roi_strides), "RoI levels should match"
@@ -569,13 +596,6 @@ class MyModel(nn.Module):
         self.roi_kernel_sizes = roi_kernel_sizes
         self.roi_strides = roi_strides
 
-        self.block_cross = nn.ModuleList([CrossBlock(
-            dim=embed_dims[0], num_heads=num_heads[0], mlp_ratio=mlp_ratios[0], qkv_bias=qkv_bias, qk_scale=qk_scale,
-            drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[cur + i], norm_layer=norm_layer,
-            sr_ratio=sr_ratios[0])
-            for i in range(depths[0])])
-        self.norm1 = norm_layer(embed_dims[0])
-
         self.roi_patch_embeds = nn.ModuleList([OverlapPatchEmbed(
                 img_size=roi_region_sizes[i],
                 patch_size=roi_kernel_sizes[i],
@@ -583,6 +603,14 @@ class MyModel(nn.Module):
                 in_chans=in_chans,
                 embed_dim=embed_dims[0]
             ) for i in range(self.n_depth_levels)])
+
+        self.block_cross = nn.ModuleList([CrossBlock(
+            dim=embed_dims[0], num_heads=num_heads[0], mlp_ratio=mlp_ratios[0], qkv_bias=qkv_bias, qk_scale=qk_scale,
+            drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0, norm_layer=norm_layer,
+            sr_ratio=roi_sr_ratios[i])
+            for i in self.n_depth_levels]
+        )
+        self.norm1 = norm_layer(embed_dims[0])
 
         self.debug = debug
         self.debug_nums = 20
@@ -663,26 +691,23 @@ class MyModel(nn.Module):
             save_image(img[0], os.path.join(self.debug_dir, "{}_img_input.png".format(self.debug_counter)))
             save_image(depth_map[0], os.path.join(self.debug_dir, "{}_depth_map_input.png".format(self.debug_counter)))
 
-        roi_embs = []
         for i_depth in range(self.n_depth_levels):
             i_batch = 0
             hmin = min_ids[i_batch, i_depth, 0]
             hmax = max_ids[i_batch, i_depth, 0]
             wmin = min_ids[i_batch, i_depth, 1]
             wmax = max_ids[i_batch, i_depth, 1]
-            roi_embs_tmp = img[:, :, hmin:hmax, wmin:wmax]
+            roi_emb = img[:, :, hmin:hmax, wmin:wmax]
             if debug:
                 save_image(
-                    (roi_embs_tmp[0] - img.min()) / img.max(),
+                    (roi_emb[0] - img.min()) / img.max(),
                     os.path.join(self.debug_dir, "{}_roi_lvl_{}.png".format(self.debug_counter, i_depth))
                 )
 
-            roi_embs_tmp, roi_H, roi_W = self.roi_patch_embeds[i_depth](roi_embs_tmp)
-            roi_embs.append(roi_embs_tmp*1.0)
+            roi_emb, roi_H, roi_W = self.roi_patch_embeds[i_depth](roi_emb)
+            
+            x_feat = self.block_cross[i_depth](x_feat, roi_emb, H, W, roi_H, roi_W)
 
-        roi_embs = torch.cat(roi_embs, dim=1)
-        for i, blk in enumerate(self.block_cross):
-            x_feat = blk(x_feat, roi_embs_tmp, H, W)
         x_feat = self.norm1(x_feat)
 
         if debug:
