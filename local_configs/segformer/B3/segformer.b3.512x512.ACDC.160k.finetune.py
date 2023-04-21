@@ -2,7 +2,7 @@ _base_ = [
     '../../_base_/models/segformer.py',
     '../../_base_/datasets/ACDC_512x512_dwnsample_repeat.py',
     '../../_base_/default_runtime.py',
-    '../../_base_/schedules/schedule_160k_adamw.py'
+    '../../_base_/schedules/schedule_320k_adamw.py'
 ]
 
 # model settings
@@ -10,7 +10,7 @@ norm_cfg = dict(type='SyncBN', requires_grad=True)
 find_unused_parameters = True
 model = dict(
     type='EncoderDecoder',
-    pretrained='/cluster/work/cvl/denfan/diandian/segformer_results/baseline_dwnsample_b3/iter_160000.pth',
+    pretrained='pretrained/mit_b3.pth',
     backbone=dict(
         type='MyModel',
         style='pytorch'),
