@@ -169,7 +169,7 @@ class CrossAttention(nn.Module):
             x_kv_ = self.norm(x_kv_)
             kv = self.kv(x_kv_).reshape(B, -1, 2, self.num_heads, C_kv // self.num_heads).permute(2, 0, 3, 1, 4)
         else:
-            kv = self.kv(x_kv_).reshape(B, -1, 2, self.num_heads, C_kv // self.num_heads).permute(2, 0, 3, 1, 4)
+            kv = self.kv(x_kv).reshape(B, -1, 2, self.num_heads, C_kv // self.num_heads).permute(2, 0, 3, 1, 4)
         k, v = kv[0], kv[1]
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
