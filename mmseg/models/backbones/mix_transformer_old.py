@@ -663,7 +663,6 @@ class MyModel(nn.Module):
             save_image(img[0], os.path.join(self.debug_dir, "{}_img_input.png".format(self.debug_counter)))
             save_image(depth_map[0], os.path.join(self.debug_dir, "{}_depth_map_input.png".format(self.debug_counter)))
 
-        roi_embs = []
         for i_depth in range(self.n_depth_levels):
             i_batch = 0
             hmin = min_ids[i_batch, i_depth, 0]
@@ -678,12 +677,9 @@ class MyModel(nn.Module):
                 )
 
             roi_embs_tmp, roi_H, roi_W = self.roi_patch_embeds[i_depth](roi_embs_tmp)
-            roi_embs.append(roi_embs_tmp*1.0)
-
-        roi_embs = torch.cat(roi_embs, dim=1)
-        for i, blk in enumerate(self.block_cross):
-            x_feat = blk(x_feat, roi_embs_tmp, H, W)
-        x_feat = self.norm1(x_feat)
+            for i, blk in enumerate(self.block_cross):
+                x_feat = blk(x_feat, roi_embs_tmp, H, W)
+            x_feat = self.norm1(x_feat)
 
         if debug:
             self.debug_counter += 1
