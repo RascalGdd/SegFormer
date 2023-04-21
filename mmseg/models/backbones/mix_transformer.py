@@ -607,7 +607,7 @@ class MyModel(nn.Module):
         self.block_cross = nn.ModuleList([CrossBlock(
             dim=embed_dims[0], num_heads=num_heads[0], mlp_ratio=mlp_ratios[0], qkv_bias=qkv_bias, qk_scale=qk_scale,
             drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0., norm_layer=norm_layer,
-            sr_ratio=roi_sr_ratios[i]) for i in self.n_depth_levels]
+            sr_ratio=roi_sr_ratios[i]) for i in range(self.n_depth_levels)]
         )
         self.norm1 = norm_layer(embed_dims[0])
 
