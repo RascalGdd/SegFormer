@@ -161,7 +161,7 @@ class CrossAttention(nn.Module):
         B, N_q, C_q = x_q.shape
         B, N_kv, C_kv = x_kv.shape
 
-        q = self.q(x).reshape(B, N_q, self.num_heads, C_q // self.num_heads).permute(0, 2, 1, 3)
+        q = self.q(x_q).reshape(B, N_q, self.num_heads, C_q // self.num_heads).permute(0, 2, 1, 3)
 
         if self.sr_ratio > 1:
             x_kv_ = x_kv.permute(0, 2, 1).reshape(B, C_kv, H_kv, W_kv)
