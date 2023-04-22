@@ -833,7 +833,7 @@ class mit_b5(MixVisionTransformer):
 @BACKBONES.register_module()
 class mit_b3_custom_baseline(MixVisionTransformerRoI):
     def __init__(self, **kwargs):
-        super(mit_b3_custom, self).__init__(
+        super(mit_b3_custom_baseline, self).__init__(
             patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[4, 4, 4, 4],
             qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 4, 18, 3], sr_ratios=[8, 4, 2, 1],
             drop_rate=0.0, drop_path_rate=0.1, use_roi = False)
@@ -841,7 +841,7 @@ class mit_b3_custom_baseline(MixVisionTransformerRoI):
 @BACKBONES.register_module()
 class mit_b3_roi(MixVisionTransformerRoI):
     def __init__(self, **kwargs):
-        super(mit_b3_custom, self).__init__(
+        super(mit_b3_roi, self).__init__(
             patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[4, 4, 4, 4],
             qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 4, 18, 3], sr_ratios=[8, 4, 2, 1],
             drop_rate=0.0, drop_path_rate=0.1, use_roi = True)
