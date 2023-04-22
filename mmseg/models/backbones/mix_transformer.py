@@ -477,12 +477,14 @@ class MixVisionTransformerRoI(nn.Module):
                  num_heads=[1, 2, 4, 8], mlp_ratios=[4, 4, 4, 4], qkv_bias=False, qk_scale=None, drop_rate=0.,
                  attn_drop_rate=0., drop_path_rate=0., norm_layer=nn.LayerNorm,
                  depths=[3, 4, 6, 3], sr_ratios=[8, 4, 2, 1],
+                 use_roi = False, 
                  roi_region_sizes=[64, 128, 256], roi_kernel_sizes=[1, 3, 5], roi_strides=[1, 1, 2], 
                  roi_sr_ratios = [1,2,2], fix_param=False, debug=False):
         super().__init__()
         self.num_classes = num_classes
         self.depths = depths
         self.fix_param = fix_param
+        self.use_roi = use_roi
 
         ## original MixVisionTransformer
 
@@ -568,6 +570,7 @@ class MixVisionTransformerRoI(nn.Module):
             drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0., norm_layer=norm_layer,
             sr_ratio=roi_sr_ratios[i]) for i in range(self.n_depth_levels)]
         )
+        self.norm_roi = norm_layer(embed_dims[0])
 
         self.debug = debug
         self.debug_nums = 20
@@ -685,48 +688,49 @@ class MixVisionTransformerRoI(nn.Module):
             x = blk(x, H, W)
         x = self.norm1(x)
 
-        B = img.shape[0]
-        assert B == 1, "Batch size should equal to 1"
+        if self.use_roi:
+            B = img.shape[0]
+            assert B == 1, "Batch size should equal to 1"
 
-        min_ids, max_ids = self.select_roi(depth_map)
+            min_ids, max_ids = self.select_roi(depth_map)
 
-        debug = self.debug
-        if debug:
-            img_to_show_resized = resize((img - img.min()) / img.max(), [H, W])
-            print(img.max(), img.min(), depth_map.max(), depth_map.min())
-            img_to_show = (img - img.min()) / img.max()
-            save_image(img[0], os.path.join(self.debug_dir, "{}_img_input.png".format(self.debug_counter)))
-            save_image(depth_map[0], os.path.join(self.debug_dir, "{}_depth_map_input.png".format(self.debug_counter)))
-
-        for i_depth in range(self.n_depth_levels):
-            i_batch = 0
-            hmin = min_ids[i_batch, i_depth, 0]
-            hmax = max_ids[i_batch, i_depth, 0]
-            wmin = min_ids[i_batch, i_depth, 1]
-            wmax = max_ids[i_batch, i_depth, 1]
-            roi_emb = img[:, :, hmin:hmax, wmin:wmax]
+            debug = self.debug
             if debug:
-                save_image(
-                    (roi_emb[0] - img.min()) / img.max(),
-                    os.path.join(self.debug_dir, "{}_roi_lvl_{}.png".format(self.debug_counter, i_depth))
-                )
+                img_to_show_resized = resize((img - img.min()) / img.max(), [H, W])
+                print(img.max(), img.min(), depth_map.max(), depth_map.min())
+                img_to_show = (img - img.min()) / img.max()
+                save_image(img[0], os.path.join(self.debug_dir, "{}_img_input.png".format(self.debug_counter)))
+                save_image(depth_map[0], os.path.join(self.debug_dir, "{}_depth_map_input.png".format(self.debug_counter)))
 
-            roi_emb, roi_H, roi_W = self.roi_patch_embeds[i_depth](roi_emb)
-            
-            x = self.block_cross[i_depth](x, roi_emb, H, W, roi_H, roi_W)
+            for i_depth in range(self.n_depth_levels):
+                i_batch = 0
+                hmin = min_ids[i_batch, i_depth, 0]
+                hmax = max_ids[i_batch, i_depth, 0]
+                wmin = min_ids[i_batch, i_depth, 1]
+                wmax = max_ids[i_batch, i_depth, 1]
+                roi_emb = img[:, :, hmin:hmax, wmin:wmax]
+                if debug:
+                    save_image(
+                        (roi_emb[0] - img.min()) / img.max(),
+                        os.path.join(self.debug_dir, "{}_roi_lvl_{}.png".format(self.debug_counter, i_depth))
+                    )
 
-        x = self.norm1(x)
+                roi_emb, roi_H, roi_W = self.roi_patch_embeds[i_depth](roi_emb)
+                
+                x = self.block_cross[i_depth](x, roi_emb, H, W, roi_H, roi_W)
 
-        if debug:
-            self.debug_counter += 1
-            if self.debug_counter >= self.debug_nums:
-                debug_checkpoint_break
+            x = self.norm_roi(x)
+
+            if debug:
+                self.debug_counter += 1
+                if self.debug_counter >= self.debug_nums:
+                    debug_checkpoint_break
 
         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
         return x
 
     def forward_features(self, img, depth_map):
-        B = x.shape[0]
+        B = img.shape[0]
         outs = []
 
         # stage 1
@@ -827,9 +831,17 @@ class mit_b5(MixVisionTransformer):
 
 
 @BACKBONES.register_module()
-class MyModel(MixVisionTransformerRoI):
+class mit_b3_custom_baseline(MixVisionTransformerRoI):
     def __init__(self, **kwargs):
-        super(MyModel, self).__init__(
+        super(mit_b3_custom, self).__init__(
             patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[4, 4, 4, 4],
             qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 4, 18, 3], sr_ratios=[8, 4, 2, 1],
-            drop_rate=0.0, drop_path_rate=0.1)
+            drop_rate=0.0, drop_path_rate=0.1, use_roi = False)
+
+@BACKBONES.register_module()
+class mit_b3_roi(MixVisionTransformerRoI):
+    def __init__(self, **kwargs):
+        super(mit_b3_custom, self).__init__(
+            patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[4, 4, 4, 4],
+            qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 4, 18, 3], sr_ratios=[8, 4, 2, 1],
+            drop_rate=0.0, drop_path_rate=0.1, use_roi = True)
