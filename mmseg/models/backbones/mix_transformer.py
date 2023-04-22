@@ -683,6 +683,7 @@ class MixVisionTransformerRoI(nn.Module):
 
     def generate_features(self, img, depth_map):
         # stage 1
+        B = img.shape[0]
         x, H, W = self.patch_embed1(img)
         for i, blk in enumerate(self.block1):
             x = blk(x, H, W)
