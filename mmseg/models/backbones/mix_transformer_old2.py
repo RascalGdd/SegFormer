@@ -118,69 +118,47 @@ class Attention(nn.Module):
 
         return x
 
-# new
+# new, from https://github.com/rishikksh20/CrossViT-pytorch/blob/master/module.py
 class CrossAttention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0., sr_ratio=1):
+    def __init__(self, dim, heads = 8, dim_head = 64, dropout = 0.):
         super().__init__()
-        assert dim % num_heads == 0, f"dim {dim} should be divided by num_heads {num_heads}."
+        inner_dim = dim_head *  heads
+        project_out = not (heads == 1 and dim_head == dim)
 
-        self.dim = dim
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
-        self.scale = qk_scale or head_dim ** -0.5
+        self.heads = heads
+        self.scale = dim_head ** -0.5
 
-        self.q = nn.Linear(dim, dim, bias=qkv_bias)
-        self.kv = nn.Linear(dim, dim * 2, bias=qkv_bias)
-        self.attn_drop = nn.Dropout(attn_drop)
-        self.proj = nn.Linear(dim, dim)
-        self.proj_drop = nn.Dropout(proj_drop)
+        self.to_k = nn.Linear(dim, inner_dim , bias=False)
+        self.to_v = nn.Linear(dim, inner_dim , bias=False)
+        self.to_q = nn.Linear(dim, inner_dim, bias=False)
 
-        self.sr_ratio = sr_ratio
-        if sr_ratio > 1:
-            self.sr = nn.Conv2d(dim, dim, kernel_size=sr_ratio, stride=sr_ratio)
-            self.norm = nn.LayerNorm(dim)
+        self.to_out = nn.Sequential(
+            nn.Linear(inner_dim, dim),
+            nn.Dropout(dropout)
+        ) if project_out else nn.Identity()
 
-        self.apply(self._init_weights)
+    def forward(self, x_q, x_kv):
+        b, n1, _ = x_kv.shape
+        h = self.heads
+        b, n2, _ = x_q.shape
 
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-        elif isinstance(m, nn.Conv2d):
-            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-            fan_out //= m.groups
-            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
-            if m.bias is not None:
-                m.bias.data.zero_()
+        k = self.to_k(x_kv)
+        k = rearrange(k, 'b n1 (h d) -> b h n1 d', h = h)
 
-    def forward(self, x_q, x_kv, H_q, W_q, H_kv, W_kv):
-        B, N_q, C_q = x_q.shape
-        B, N_kv, C_kv = x_kv.shape
+        v = self.to_v(x_kv)
+        v = rearrange(v, 'b n1 (h d) -> b h n1 d', h = h)
 
-        q = self.q(x_q).reshape(B, N_q, self.num_heads, C_q // self.num_heads).permute(0, 2, 1, 3)
+        q = self.to_q(x_q)
+        q = rearrange(q, 'b n2 (h d) -> b h n2 d', h = h)
 
-        if self.sr_ratio > 1:
-            x_kv_ = x_kv.permute(0, 2, 1).reshape(B, C_kv, H_kv, W_kv)
-            x_kv_ = self.sr(x_kv_).reshape(B, C_kv, -1).permute(0, 2, 1)
-            x_kv_ = self.norm(x_kv_)
-            kv = self.kv(x_kv_).reshape(B, -1, 2, self.num_heads, C_kv // self.num_heads).permute(2, 0, 3, 1, 4)
-        else:
-            kv = self.kv(x_kv).reshape(B, -1, 2, self.num_heads, C_kv // self.num_heads).permute(2, 0, 3, 1, 4)
-        k, v = kv[0], kv[1]
+        dots = einsum(q, k, 'b h i d, b h j d -> b h i j') * self.scale
+        attn = dots.softmax(dim=-1)
 
-        attn = (q @ k.transpose(-2, -1)) * self.scale
-        attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
+        out = einsum(attn, v, 'b h i j, b h j d -> b h i d')
+        out = rearrange(out, 'b h n d -> b n (h d)')
+        out =  self.to_out(out)
+        return out
 
-        x = (attn @ v).transpose(1, 2).reshape(B, N_q, C_q)
-        x = self.proj(x)
-        x = self.proj_drop(x)
-
-        return x
 
 class Block(nn.Module):
 
@@ -228,10 +206,7 @@ class CrossBlock(nn.Module):
         super().__init__()
         self.norm1_q = norm_layer(dim)
         self.norm1_kv = norm_layer(dim)
-        self.cross_attn = CrossAttention(
-            dim,
-            num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
-            attn_drop=attn_drop, proj_drop=drop, sr_ratio=sr_ratio)
+        self.cross_attn = CrossAttention(dim, heads = num_heads, dim_head = dim, dropout = drop)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
@@ -255,11 +230,9 @@ class CrossBlock(nn.Module):
             if m.bias is not None:
                 m.bias.data.zero_()
 
-    def forward(self, x_q, x_kv, H_q, W_q, H_kv, W_kv):
-        x = x_q + self.drop_path(
-            self.cross_attn(self.norm1_q(x_q), self.norm1_kv(x_kv), H_q, W_q, H_kv, W_kv)
-        )
-        x = x + self.drop_path(self.mlp(self.norm2(x), H_q, W_q))
+    def forward(self, x_q, x_kv, H, W):
+        x = x_q + self.drop_path(self.cross_attn(self.norm1_q(x_q), self.norm1_q(x_kv)))
+        x = x + self.drop_path(self.mlp(self.norm2(x), H, W))
 
         return x
 
@@ -305,18 +278,6 @@ class OverlapPatchEmbed(nn.Module):
 
         return x, H, W
 
-class DWConv(nn.Module):
-    def __init__(self, dim=768):
-        super(DWConv, self).__init__()
-        self.dwconv = nn.Conv2d(dim, dim, 3, 1, 1, bias=True, groups=dim)
-
-    def forward(self, x, H, W):
-        B, N, C = x.shape
-        x = x.transpose(1, 2).view(B, C, H, W)
-        x = self.dwconv(x)
-        x = x.flatten(2).transpose(1, 2)
-
-        return x
 
 class MixVisionTransformer(nn.Module):
     def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dims=[64, 128, 256, 512],
@@ -428,6 +389,49 @@ class MixVisionTransformer(nn.Module):
         self.num_classes = num_classes
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
+    def extract_mid_feature(self, x):
+        B = x.shape[0]
+        # stage 1
+        x, H, W = self.patch_embed1(x)
+        for i, blk in enumerate(self.block1):
+            x = blk(x, H, W)
+        x = self.norm1(x)
+        # x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous() # changed: resize after cross attn
+        return x, H, W
+
+    def forward_features_add_features(self, x):
+        B = x.shape[0]
+        outs = []
+
+        # stage 1
+        outs.append(x)
+
+        # stage 2
+        x, H, W = self.patch_embed2(x)
+        for i, blk in enumerate(self.block2):
+            x = blk(x, H, W)
+        x = self.norm2(x)
+        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+        outs.append(x)
+
+        # stage 3
+        x, H, W = self.patch_embed3(x)
+        for i, blk in enumerate(self.block3):
+            x = blk(x, H, W)
+        x = self.norm3(x)
+        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+        outs.append(x)
+
+        # stage 4
+        x, H, W = self.patch_embed4(x)
+        for i, blk in enumerate(self.block4):
+            x = blk(x, H, W)
+        x = self.norm4(x)
+        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+        outs.append(x)
+
+        return outs
+
     def forward_features(self, x):
         B = x.shape[0]
         outs = []
@@ -472,302 +476,19 @@ class MixVisionTransformer(nn.Module):
 
         return x
 
-class MixVisionTransformerRoI(nn.Module):
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dims=[64, 128, 256, 512],
-                 num_heads=[1, 2, 4, 8], mlp_ratios=[4, 4, 4, 4], qkv_bias=False, qk_scale=None, drop_rate=0.,
-                 attn_drop_rate=0., drop_path_rate=0., norm_layer=nn.LayerNorm,
-                 depths=[3, 4, 6, 3], sr_ratios=[8, 4, 2, 1],
-                 roi_region_sizes=[64, 128, 256], roi_kernel_sizes=[1, 3, 5], roi_strides=[1, 1, 2], 
-                 roi_sr_ratios = [1,2,2], fix_param=False, debug=False):
-        super().__init__()
-        self.num_classes = num_classes
-        self.depths = depths
-        self.fix_param = fix_param
 
-        ## original MixVisionTransformer
+class DWConv(nn.Module):
+    def __init__(self, dim=768):
+        super(DWConv, self).__init__()
+        self.dwconv = nn.Conv2d(dim, dim, 3, 1, 1, bias=True, groups=dim)
 
-        # patch_embed
-        self.patch_embed1 = OverlapPatchEmbed(img_size=img_size, patch_size=7, stride=4, in_chans=in_chans,
-                                              embed_dim=embed_dims[0])
-        self.patch_embed2 = OverlapPatchEmbed(img_size=img_size // 4, patch_size=3, stride=2, in_chans=embed_dims[0],
-                                              embed_dim=embed_dims[1])
-        self.patch_embed3 = OverlapPatchEmbed(img_size=img_size // 8, patch_size=3, stride=2, in_chans=embed_dims[1],
-                                              embed_dim=embed_dims[2])
-        self.patch_embed4 = OverlapPatchEmbed(img_size=img_size // 16, patch_size=3, stride=2, in_chans=embed_dims[2],
-                                              embed_dim=embed_dims[3])
+    def forward(self, x, H, W):
+        B, N, C = x.shape
+        x = x.transpose(1, 2).view(B, C, H, W)
+        x = self.dwconv(x)
+        x = x.flatten(2).transpose(1, 2)
 
-        # transformer encoder
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
-        cur = 0
-        self.block1 = nn.ModuleList([Block(
-            dim=embed_dims[0], num_heads=num_heads[0], mlp_ratio=mlp_ratios[0], qkv_bias=qkv_bias, qk_scale=qk_scale,
-            drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[cur + i], norm_layer=norm_layer,
-            sr_ratio=sr_ratios[0])
-            for i in range(depths[0])])
-        self.norm1 = norm_layer(embed_dims[0])
-
-        cur += depths[0]
-        self.block2 = nn.ModuleList([Block(
-            dim=embed_dims[1], num_heads=num_heads[1], mlp_ratio=mlp_ratios[1], qkv_bias=qkv_bias, qk_scale=qk_scale,
-            drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[cur + i], norm_layer=norm_layer,
-            sr_ratio=sr_ratios[1])
-            for i in range(depths[1])])
-        self.norm2 = norm_layer(embed_dims[1])
-
-        cur += depths[1]
-        self.block3 = nn.ModuleList([Block(
-            dim=embed_dims[2], num_heads=num_heads[2], mlp_ratio=mlp_ratios[2], qkv_bias=qkv_bias, qk_scale=qk_scale,
-            drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[cur + i], norm_layer=norm_layer,
-            sr_ratio=sr_ratios[2])
-            for i in range(depths[2])])
-        self.norm3 = norm_layer(embed_dims[2])
-
-        cur += depths[2]
-        self.block4 = nn.ModuleList([Block(
-            dim=embed_dims[3], num_heads=num_heads[3], mlp_ratio=mlp_ratios[3], qkv_bias=qkv_bias, qk_scale=qk_scale,
-            drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[cur + i], norm_layer=norm_layer,
-            sr_ratio=sr_ratios[3])
-            for i in range(depths[3])])
-        self.norm4 = norm_layer(embed_dims[3])
-
-        # classification head
-        # self.head = nn.Linear(embed_dims[3], num_classes) if num_classes > 0 else nn.Identity()
-
-        self.apply(self._init_weights)
-
-        if fix_param:
-            for param in self.parameters():
-                    param.requires_grad = False
-
-            for param in self.patch_embed1.parameters():
-                    param.requires_grad = True
-            for param in self.block1.parameters():
-                    param.requires_grad = True
-
-        ## RoI extensions
-
-        self.n_depth_levels = len(roi_region_sizes)
-
-        assert self.n_depth_levels == len(roi_kernel_sizes), "RoI levels should match"
-        assert self.n_depth_levels == len(roi_strides), "RoI levels should match"
-
-        self.roi_region_sizes = roi_region_sizes
-        self.roi_kernel_sizes = roi_kernel_sizes
-        self.roi_strides = roi_strides
-
-        self.roi_patch_embeds = nn.ModuleList([OverlapPatchEmbed(
-                img_size=roi_region_sizes[i],
-                patch_size=roi_kernel_sizes[i],
-                stride=roi_strides[i],
-                in_chans=in_chans,
-                embed_dim=embed_dims[0]
-            ) for i in range(self.n_depth_levels)])
-
-        self.block_cross = nn.ModuleList([CrossBlock(
-            dim=embed_dims[0], num_heads=num_heads[0], mlp_ratio=mlp_ratios[0], qkv_bias=qkv_bias, qk_scale=qk_scale,
-            drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0., norm_layer=norm_layer,
-            sr_ratio=roi_sr_ratios[i]) for i in range(self.n_depth_levels)]
-        )
-
-        self.debug = debug
-        self.debug_nums = 20
-        self.debug_counter = 0
-        self.debug_dir = "debug"
-        if debug:
-            if not os.path.exists(self.debug_dir):
-                os.mkdir(self.debug_dir)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-        elif isinstance(m, nn.Conv2d):
-            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-            fan_out //= m.groups
-            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
-            if m.bias is not None:
-                m.bias.data.zero_()
-
-    def init_weights(self, pretrained=None):
-        if isinstance(pretrained, str):
-            logger = get_root_logger()
-            load_checkpoint(self, pretrained, map_location='cpu', strict=False, logger=logger)
-
-    def reset_drop_path(self, drop_path_rate):
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(self.depths))]
-        cur = 0
-        for i in range(self.depths[0]):
-            self.block1[i].drop_path.drop_prob = dpr[cur + i]
-
-        cur += self.depths[0]
-        for i in range(self.depths[1]):
-            self.block2[i].drop_path.drop_prob = dpr[cur + i]
-
-        cur += self.depths[1]
-        for i in range(self.depths[2]):
-            self.block3[i].drop_path.drop_prob = dpr[cur + i]
-
-        cur += self.depths[2]
-        for i in range(self.depths[3]):
-            self.block4[i].drop_path.drop_prob = dpr[cur + i]
-
-    def freeze_patch_emb(self):
-        self.patch_embed1.requires_grad = False
-
-    @torch.jit.ignore
-    def no_weight_decay(self):
-        return {'pos_embed1', 'pos_embed2', 'pos_embed3', 'pos_embed4', 'cls_token'}  # has pos_embed may be better
-
-    def get_classifier(self):
-        return self.head
-
-    def reset_classifier(self, num_classes, global_pool=''):
-        self.num_classes = num_classes
-        self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
-
-
-    @torch.no_grad()
-    def select_roi(self, depth_map):
-        roi_region_sizes = self.roi_region_sizes
-        roi_kernel_sizes = self.roi_kernel_sizes
-
-        B, _, H, W = depth_map.shape
-        img_size = (H, W)
-        N = self.n_depth_levels
-
-        # max_val: (B,1,1,1)
-        max_val = torch.amax(depth_map, dim=(2, 3)).unsqueeze(-1).unsqueeze(-1)
-
-        # max_val_ids: (L,4), e.g., [[0,0,0,0], [0,0,0,1],..., [3,0,16,501]] (list of max_value_points)
-        max_val_ids = (depth_map == max_val).nonzero(as_tuple = False)
-
-        # format: [[(h,w) for depth_lvls] for batch], -1 (default) means not-applicable
-        min_ids = torch.zeros(B, N, 2).long() - 1  # lower-left anchor point, (B,N,2)
-        max_ids = torch.zeros(B, N, 2).long() - 1  # upper-right anchor point, (B,N,2)
-        # roi_regions_masks = torch.zeros(B, N, H, W)
-
-        for i_data in range(B):
-            central_id = max_val_ids[max_val_ids[:, 0] == i_data].float().mean(dim=0).long()[2:]  # (h,w)
-            if central_id[0] % 4 != 0:
-                central_id[0] = central_id[0] - central_id[0] % 4
-            if central_id[1] % 4 != 0:
-                central_id[1] = central_id[1] - central_id[1] % 4
-
-            this_max_val = max_val[i_data].cpu().detach().item()
-            for i_depth in range(N):
-                min_id = (central_id - roi_region_sizes[i_depth] / 2).long()
-                max_id = (central_id + roi_region_sizes[i_depth] / 2).long()
-
-                for i_axis in range(2):
-                    if min_id[i_axis] < 0:
-                        max_id[i_axis] += - min_id[i_axis]
-                        min_id[i_axis] = 0
-
-                    if max_id[i_axis] > img_size[i_axis]:
-                        min_id[i_axis] -= max_id[i_axis] - img_size[i_axis]
-                        max_id[i_axis] = img_size[i_axis]
-
-                if (min_id + roi_kernel_sizes[i_depth] < max_id).all():
-                    min_ids[i_data, i_depth, :] = min_id
-                    max_ids[i_data, i_depth, :] = max_id
-                    # roi_regions_masks[i_data, i_depth, min_id[0]:max_id[0], min_id[1]:max_id[1]] = 1
-
-        return min_ids, max_ids # roi_regions_masks, min_ids, max_ids
-
-    def generate_features(self, img, depth_map):
-        # stage 1
-        x, H, W = self.patch_embed1(img)
-        for i, blk in enumerate(self.block1):
-            x = blk(x, H, W)
-        x = self.norm1(x)
-
-        B = img.shape[0]
-        assert B == 1, "Batch size should equal to 1"
-
-        min_ids, max_ids = self.select_roi(depth_map)
-
-        debug = self.debug
-        if debug:
-            img_to_show_resized = resize((img - img.min()) / img.max(), [H, W])
-            print(img.max(), img.min(), depth_map.max(), depth_map.min())
-            img_to_show = (img - img.min()) / img.max()
-            save_image(img[0], os.path.join(self.debug_dir, "{}_img_input.png".format(self.debug_counter)))
-            save_image(depth_map[0], os.path.join(self.debug_dir, "{}_depth_map_input.png".format(self.debug_counter)))
-
-        for i_depth in range(self.n_depth_levels):
-            i_batch = 0
-            hmin = min_ids[i_batch, i_depth, 0]
-            hmax = max_ids[i_batch, i_depth, 0]
-            wmin = min_ids[i_batch, i_depth, 1]
-            wmax = max_ids[i_batch, i_depth, 1]
-            roi_emb = img[:, :, hmin:hmax, wmin:wmax]
-            if debug:
-                save_image(
-                    (roi_emb[0] - img.min()) / img.max(),
-                    os.path.join(self.debug_dir, "{}_roi_lvl_{}.png".format(self.debug_counter, i_depth))
-                )
-
-            roi_emb, roi_H, roi_W = self.roi_patch_embeds[i_depth](roi_emb)
-            
-            x = self.block_cross[i_depth](x, roi_emb, H, W, roi_H, roi_W)
-
-        x = self.norm1(x)
-
-        if debug:
-            self.debug_counter += 1
-            if self.debug_counter >= self.debug_nums:
-                debug_checkpoint_break
-
-        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
         return x
-
-    def forward_features(self, img, depth_map):
-        B = x.shape[0]
-        outs = []
-
-        # stage 1
-        x = self.generate_features(img, depth_map)
-        outs.append(x)
-
-        # stage 2
-        x, H, W = self.patch_embed2(x)
-        for i, blk in enumerate(self.block2):
-            x = blk(x, H, W)
-        x = self.norm2(x)
-        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
-        outs.append(x)
-
-        # stage 3
-        x, H, W = self.patch_embed3(x)
-        for i, blk in enumerate(self.block3):
-            x = blk(x, H, W)
-        x = self.norm3(x)
-        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
-        outs.append(x)
-
-        # stage 4
-        x, H, W = self.patch_embed4(x)
-        for i, blk in enumerate(self.block4):
-            x = blk(x, H, W)
-        x = self.norm4(x)
-        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
-        outs.append(x)
-
-        return outs
-
-    def forward(self, x):
-        x = x.to(torch.float32)
-        img = x[:, :3, :, :]
-        depth_map = x[:, 3, :, :].unsqueeze(1)
-        depth_map[depth_map == depth_map.max()] *= 0
-        result = self.forward_features(img, depth_map)
-
-        return result
-
 
 
 
@@ -824,12 +545,157 @@ class mit_b5(MixVisionTransformer):
             qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 6, 40, 3], sr_ratios=[8, 4, 2, 1],
             drop_rate=0.0, drop_path_rate=0.1)
 
-
-
 @BACKBONES.register_module()
-class MyModel(MixVisionTransformerRoI):
-    def __init__(self, **kwargs):
-        super(MyModel, self).__init__(
-            patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[4, 4, 4, 4],
-            qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 4, 18, 3], sr_ratios=[8, 4, 2, 1],
-            drop_rate=0.0, drop_path_rate=0.1)
+class MyModel(nn.Module):
+    def __init__(self, embed_dims=[64, 128, 256, 512], in_chans=3,
+                 num_heads=[1, 2, 4, 8], mlp_ratios=[4, 4, 4, 4], qkv_bias=False, qk_scale=None, drop_rate=0.,
+                 attn_drop_rate=0., drop_path_rate=0., norm_layer=nn.LayerNorm,
+                 depths=[3, 4, 6, 3], sr_ratios=[8, 4, 2, 1],
+                 roi_region_sizes=[64, 128, 256], roi_kernel_sizes=[1, 3, 5], roi_strides=[1, 1, 2], debug=False, **kwargs):
+        super(MyModel, self).__init__()
+        self.mit = mit_b3()
+
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
+        cur = 0
+
+        # RoI embeds, only for pixel_level (the same role as patch_embed1)
+        self.n_depth_levels = len(roi_region_sizes)
+        self.roi_embeds = [None] * len(roi_region_sizes)
+
+        assert self.n_depth_levels == len(roi_kernel_sizes), "RoI levels should match"
+        assert self.n_depth_levels == len(roi_strides), "RoI levels should match"
+
+        self.roi_region_sizes = roi_region_sizes
+        self.roi_kernel_sizes = roi_kernel_sizes
+        self.roi_strides = roi_strides
+
+        self.block_cross = nn.ModuleList([CrossBlock(
+            dim=embed_dims[0], num_heads=num_heads[0], mlp_ratio=mlp_ratios[0], qkv_bias=qkv_bias, qk_scale=qk_scale,
+            drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[cur + i], norm_layer=norm_layer,
+            sr_ratio=sr_ratios[0])
+            for i in range(depths[0])])
+        self.norm1 = norm_layer(embed_dims[0])
+
+        self.roi_patch_embeds = nn.ModuleList([OverlapPatchEmbed(
+                img_size=roi_region_sizes[i],
+                patch_size=roi_kernel_sizes[i],
+                stride=roi_strides[i],
+                in_chans=in_chans,
+                embed_dim=embed_dims[0]
+            ) for i in range(self.n_depth_levels)])
+
+        self.debug = debug
+        self.debug_nums = 20
+        self.debug_counter = 0
+        self.debug_dir = "debug"
+        if debug:
+            if not os.path.exists(self.debug_dir):
+                os.mkdir(self.debug_dir)
+
+    @torch.no_grad()
+    def select_roi(self, depth_map):
+        roi_region_sizes = self.roi_region_sizes
+        roi_kernel_sizes = self.roi_kernel_sizes
+
+        B, _, H, W = depth_map.shape
+        img_size = (H, W)
+        N = self.n_depth_levels
+
+        # max_val: (B,1,1,1)
+        max_val = torch.amax(depth_map, dim=(2, 3)).unsqueeze(-1).unsqueeze(-1)
+
+        # max_val_ids: (L,4), e.g., [[0,0,0,0], [0,0,0,1],..., [3,0,16,501]] (list of max_value_points)
+        max_val_ids = (depth_map == max_val).nonzero()
+
+        # format: [[(h,w) for depth_lvls] for batch], -1 (default) means not-applicable
+        min_ids = torch.zeros(B, N, 2).long() - 1  # lower-left anchor point, (B,N,2)
+        max_ids = torch.zeros(B, N, 2).long() - 1  # upper-right anchor point, (B,N,2)
+        roi_regions_masks = torch.zeros(B, N, H, W)
+
+        for i_data in range(B):
+            central_id = max_val_ids[max_val_ids[:, 0] == i_data].float().mean(dim=0).long()[2:]  # (h,w)
+            if central_id[0] % 4 != 0:
+                central_id[0] = central_id[0] - central_id[0] % 4
+            if central_id[1] % 4 != 0:
+                central_id[1] = central_id[1] - central_id[1] % 4
+
+            this_max_val = max_val[i_data].cpu().detach().item()
+            for i_depth in range(N):
+                min_id = (central_id - roi_region_sizes[i_depth] / 2).long()
+                max_id = (central_id + roi_region_sizes[i_depth] / 2).long()
+
+                for i_axis in range(2):
+                    if min_id[i_axis] < 0:
+                        max_id[i_axis] += - min_id[i_axis]
+                        min_id[i_axis] = 0
+
+                    if max_id[i_axis] > img_size[i_axis]:
+                        min_id[i_axis] -= max_id[i_axis] - img_size[i_axis]
+                        max_id[i_axis] = img_size[i_axis]
+
+                if (min_id + roi_kernel_sizes[i_depth] < max_id).all():
+                    min_ids[i_data, i_depth, :] = min_id
+                    max_ids[i_data, i_depth, :] = max_id
+                    roi_regions_masks[i_data, i_depth, min_id[0]:max_id[0], min_id[1]:max_id[1]] = 1
+
+        return roi_regions_masks, min_ids, max_ids
+
+    def init_weights(self, pretrained=None):
+        self.mit.init_weights(pretrained)
+        print("Load the checkpoint mitb3!")
+
+    def generate_features(self, img, depth_map):
+        x_feat, H, W = self.mit.extract_mid_feature(img)
+
+        B = img.shape[0]
+        assert B == 1, "Batch size should equal to 1"
+
+        # stage 1, RoI part
+
+        # new
+        _, min_ids, max_ids = self.select_roi(depth_map)
+
+        debug = self.debug
+        if debug:
+            img_to_show_resized = resize((img - img.min()) / img.max(), [H, W])
+            print(img.max(), img.min(), depth_map.max(), depth_map.min())
+            img_to_show = (img - img.min()) / img.max()
+            save_image(img[0], os.path.join(self.debug_dir, "{}_img_input.png".format(self.debug_counter)))
+            save_image(depth_map[0], os.path.join(self.debug_dir, "{}_depth_map_input.png".format(self.debug_counter)))
+
+        for i_depth in range(self.n_depth_levels):
+            i_batch = 0
+            hmin = min_ids[i_batch, i_depth, 0]
+            hmax = max_ids[i_batch, i_depth, 0]
+            wmin = min_ids[i_batch, i_depth, 1]
+            wmax = max_ids[i_batch, i_depth, 1]
+            roi_embs_tmp = img[:, :, hmin:hmax, wmin:wmax]
+            if debug:
+                save_image(
+                    (roi_embs_tmp[0] - img.min()) / img.max(),
+                    os.path.join(self.debug_dir, "{}_roi_lvl_{}.png".format(self.debug_counter, i_depth))
+                )
+
+            roi_embs_tmp, roi_H, roi_W = self.roi_patch_embeds[i_depth](roi_embs_tmp)
+            for i, blk in enumerate(self.block_cross):
+                x_feat = blk(x_feat, roi_embs_tmp, H, W)
+            x_feat = self.norm1(x_feat)
+
+        if debug:
+            self.debug_counter += 1
+            if self.debug_counter >= self.debug_nums:
+                debug_checkpoint_break
+
+        x_feat = x_feat.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+        return x_feat
+
+
+    def forward(self, x):
+        x = x.to(torch.float32)
+        img = x[:, :3, :, :]
+        depth_map = x[:, 3, :, :].unsqueeze(1)
+        depth_map[depth_map == depth_map.max()] *= 0
+        x_feat = self.generate_features(img, depth_map)
+        result = self.mit.forward_features_add_features(x_feat)
+
+        return result
