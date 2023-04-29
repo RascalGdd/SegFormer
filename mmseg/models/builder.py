@@ -9,8 +9,6 @@ HEADS = Registry('head')
 LOSSES = Registry('loss')
 SEGMENTORS = Registry('segmentor')
 
-bbb = BACKBONES.get("mit_b3_custom_baseline")
-print("mit_b3_custom_baseline", bbb)
 
 def build(cfg, registry, default_args=None):
     """Build a module.
