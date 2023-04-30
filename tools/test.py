@@ -10,6 +10,7 @@ from mmcv.utils import DictAction
 from mmseg.apis import multi_gpu_test, single_gpu_test
 from mmseg.datasets import build_dataloader, build_dataset
 from mmseg.models import build_segmentor
+from mmseg.models import BACKBONES
 from IPython import embed
 
 def parse_args():
@@ -65,6 +66,9 @@ def parse_args():
 
 def main():
     args = parse_args()
+
+    bbb = BACKBONES.get("mit_b3_custom_baseline")
+    print("mit_b3_custom_baseline", bbb)
 
     assert args.out or args.eval or args.format_only or args.show \
         or args.show_dir, \
