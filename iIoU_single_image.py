@@ -20,7 +20,41 @@ categories = [26, 24, 27, 28, 25, 33, 32, 31]
 cate_mapping = {24: 11, 25: 12, 26: 13, 27: 14, 28: 15, 31: 16, 32: 17, 33: 18}
 # color mapping only considers G channel in RGB image
 color_mapping = {24: 93, 25: 97, 26: 101, 27: 105, 28: 109, 31: 121, 32: 125, 33: 128}
-
+ids2name = {0:'unlabeled',
+    1:'ego vehicle',
+    2:'rectification border',
+    3:'out of roi',
+    4:'static',
+    5:'dynamic',
+    6:'ground',
+    7:'road',
+    8:'sidewalk',
+    9:'parking',
+    10:'rail track',
+    11:'building',
+    12:'wall',
+    13:'fence',
+    14:'guard rail',
+    15:'bridge',
+    16:'tunnel',
+    17:'pole',
+    18:'polegroup',
+    19:'traffic light',
+    20:'traffic sign',
+    21:'vegetation',
+    22:'terrain',
+    23:'sky',
+    24:'person',
+    25:'rider',
+    26:'car',
+    27:'truck',
+    28:'bus',
+    29:'caravan',
+    30:'trailer',
+    31:'train',
+    32:'motorcycle',
+    33:'bicycle',
+}
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -35,7 +69,9 @@ def main():
     args = parse_args()
     prediction_dir = args.pred_dir
     gt_dir = args.gt_dir
+    txt_out_path = os.path.join(prediction_dir,"iIoU_eval.txt")
 
+    iIoUs = []
     for label in categories:
         TP_pixels = 0
         FN_pixels = 0
@@ -72,8 +108,19 @@ def main():
         else:
             iIoU = TP_pixels/(TP_pixels + FN_pixels + FP_pixels)
 
-        print("The iIoU of " + str(label) + "is")
-        print(iIoU)
+        iIoUs.append(iIoU)
+        print_temp_str = "The iIoU of " + str(label) + " " + ids2name[label] + " is " + str(iIoU)
+        print(print_temp_str)
+
+        with open(txt_out_path, "a") as file_object:
+            file_object.write(print_temp_str)
+
+    ave_iIoU = sum(iIoUs) / len(iIoUs)
+    print_temp_str = "Average iIoU over all labelled instance classes is " + str(ave_iIoU)
+    print(print_temp_str)
+    with open(txt_out_path, "a") as file_object:
+        file_object.write(print_temp_str)
+
 
 if __name__ == '__main__':
     main()
