@@ -60,7 +60,8 @@ def main():
                 for R_color in instance_R:
                     # print(gt[gt_mask][:, :, 0])
                     instance_map = np.all(gt==(R_color, color_mapping[label], 0), axis=-1)
-                    # print(instance_map.shape)
+                    print(instance_map.shape)
+                    print(pred_mask.shape)
                     intersection = instance_map[pred_mask] == True
                     intersection_count = np.count_nonzero(intersection)
                     area = np.count_nonzero(instance_map)
