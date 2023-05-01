@@ -7,6 +7,7 @@ import tempfile
 
 import mmcv
 import numpy as np
+from PIL import Image
 import torch
 import torch.distributed as dist
 from mmcv.image import tensor2imgs
