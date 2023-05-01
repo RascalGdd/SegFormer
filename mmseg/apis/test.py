@@ -1,3 +1,4 @@
+import os
 import os.path as osp
 import pickle
 import shutil
@@ -84,6 +85,13 @@ def single_gpu_test(model,
                     palette=dataset.PALETTE,
                     show=show,
                     out_file=out_file)
+
+                iIoU_path = os.path.join(out_dir, "iIoU_results", str(img_meta['ori_filename']))
+                iIoU_path = pathlib.Path(iIoU_path)
+                os.makedirs(iIoU_path.parent, exist_ok=True)
+                im = Image.fromarray(np.uint8(result[0]))
+                im.save(iIoU_path)
+                print("label saved to: ", iIoU_path)
 
         if isinstance(result, list):
             if efficient_test:
