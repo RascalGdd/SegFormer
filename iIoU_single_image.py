@@ -104,10 +104,12 @@ def main():
                         weight = average_area/area
                         TP_pixels += weight*intersection_count
                         FN_pixels += weight*FN
-        if TP_pixels == 0 and (TP_pixels + FN_pixels + FP_pixels) == 0:
-            iIoU = 1
+
+        if TP_pixels + FN_pixels + FP_pixels == 0:
+            print(ids2name[label], "no instance found")
+            continue
         else:
-            iIoU = TP_pixels/(TP_pixels + FN_pixels + FP_pixels)
+            iIoU = 1.0*TP_pixels/(TP_pixels + FN_pixels + FP_pixels)
 
         iIoUs.append(iIoU)
         print_temp_str = "The iIoU of " + str(label) + " " + ids2name[label] + " is " + str(iIoU)
