@@ -78,7 +78,7 @@ def main():
         FP_pixels = 0
         average_area = average_sizes[label]
         for prediction_folder in os.listdir(prediction_dir):
-            if os.path.isdir(prediction_folder)
+            if os.path.isdir(prediction_folder):
                 for prediction_name in os.listdir(os.path.join(prediction_dir, prediction_folder)):
                     prediction_path = os.path.join(prediction_dir, prediction_folder, prediction_name)
                     gt_path = os.path.join(gt_dir, prediction_folder, prediction_name.replace("leftImg8bit", "gt_panoptic"))
