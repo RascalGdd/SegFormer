@@ -80,7 +80,6 @@ def main():
         for prediction_folder in os.listdir(prediction_dir):
             pred_dir_full = os.path.join(prediction_dir, prediction_folder)
             if os.path.isdir(pred_dir_full):
-                print("label {}, parsing folder {}".format(label, pred_dir_full))
                 for prediction_name in os.listdir(pred_dir_full):
                     prediction_path = os.path.join(prediction_dir, prediction_folder, prediction_name)
                     gt_path = os.path.join(gt_dir, prediction_folder, prediction_name.replace("leftImg8bit", "gt_panoptic"))
