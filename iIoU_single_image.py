@@ -78,31 +78,32 @@ def main():
         FP_pixels = 0
         average_area = average_sizes[label]
         for prediction_folder in os.listdir(prediction_dir):
-            for prediction_name in os.listdir(os.path.join(prediction_dir, prediction_folder)):
-                prediction_path = os.path.join(prediction_dir, prediction_folder, prediction_name)
-                gt_path = os.path.join(gt_dir, prediction_folder, prediction_name.replace("leftImg8bit", "gt_panoptic"))
-                prediction = Image.open(prediction_path)
-                prediction = np.array(prediction)
-                gt = Image.open(gt_path)
-                gt = np.array(gt)
-                pred_mask = prediction == cate_mapping[label]
-                gt_G = gt[:, :, 1]
-                gt_mask = gt_G == color_mapping[label]
-                FP_pixels += np.count_nonzero(pred_mask[~gt_mask]==True)
-                # print(FP_pixels)
-                # unique R channel values of the corresponding masks. e.g. [144, 145] means two instances of corresponding class in this image
-                instance_R = np.unique(gt[gt_mask, :][:, 0])
-                count_instances = len(instance_R)
-                for R_color in instance_R:
-                    # print(gt[gt_mask][:, :, 0])
-                    instance_map = np.all(gt==(R_color, color_mapping[label], 0), axis=-1)
-                    intersection = instance_map[pred_mask] == True
-                    intersection_count = np.count_nonzero(intersection)
-                    area = np.count_nonzero(instance_map)
-                    FN = area - intersection_count
-                    weight = average_area/area
-                    TP_pixels += weight*intersection_count
-                    FN_pixels += weight*FN
+            if os.path.isdir(prediction_folder)
+                for prediction_name in os.listdir(os.path.join(prediction_dir, prediction_folder)):
+                    prediction_path = os.path.join(prediction_dir, prediction_folder, prediction_name)
+                    gt_path = os.path.join(gt_dir, prediction_folder, prediction_name.replace("leftImg8bit", "gt_panoptic"))
+                    prediction = Image.open(prediction_path)
+                    prediction = np.array(prediction)
+                    gt = Image.open(gt_path)
+                    gt = np.array(gt)
+                    pred_mask = prediction == cate_mapping[label]
+                    gt_G = gt[:, :, 1]
+                    gt_mask = gt_G == color_mapping[label]
+                    FP_pixels += np.count_nonzero(pred_mask[~gt_mask]==True)
+                    # print(FP_pixels)
+                    # unique R channel values of the corresponding masks. e.g. [144, 145] means two instances of corresponding class in this image
+                    instance_R = np.unique(gt[gt_mask, :][:, 0])
+                    count_instances = len(instance_R)
+                    for R_color in instance_R:
+                        # print(gt[gt_mask][:, :, 0])
+                        instance_map = np.all(gt==(R_color, color_mapping[label], 0), axis=-1)
+                        intersection = instance_map[pred_mask] == True
+                        intersection_count = np.count_nonzero(intersection)
+                        area = np.count_nonzero(instance_map)
+                        FN = area - intersection_count
+                        weight = average_area/area
+                        TP_pixels += weight*intersection_count
+                        FN_pixels += weight*FN
         if TP_pixels == 0 and (TP_pixels + FN_pixels + FP_pixels) == 0:
             iIoU = 1
         else:
