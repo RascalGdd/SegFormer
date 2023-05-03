@@ -74,8 +74,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
             auxiliary_head=auxiliary_head,
             train_cfg=train_cfg,
             test_cfg=test_cfg,
-            pretrained=pretrained,
-            init_cfg=init_cfg)
+            pretrained=pretrained)
 
         self.scales = scales
         self.feature_scale = feature_scale
