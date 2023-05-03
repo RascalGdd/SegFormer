@@ -22,6 +22,7 @@ from .uper_head import UPerHead
 
 from .hrda_head import HRDAHead
 from .daformer_head import DAFormerHead
+from .isa_head import ISAHead
 
 
 from .segformer_head import SegFormerHead
@@ -31,5 +32,5 @@ __all__ = [
     'UPerHead', 'DepthwiseSeparableASPPHead', 'ANNHead', 'DAHead', 'OCRHead',
     'EncHead', 'DepthwiseSeparableFCNHead', 'FPNHead', 'EMAHead', 'DNLHead',
     'PointHead', 'APCHead', 'DMHead', 'LRASPPHead',
-    'SegFormerHead', 'HRDAHead', 'DAFormerHead',
+    'SegFormerHead', 'HRDAHead', 'DAFormerHead', 'ISAHead',
 ]
