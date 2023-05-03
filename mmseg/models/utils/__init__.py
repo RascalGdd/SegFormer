@@ -6,5 +6,6 @@ from .up_conv_block import UpConvBlock
 
 __all__ = [
     'ResLayer', 'SelfAttentionBlock', 'make_divisible', 'InvertedResidual',
-    'UpConvBlock', 'InvertedResidualV3'
+    'UpConvBlock', 'InvertedResidualV3', 
+    'mit_convert', 'nchw_to_nlc', 'nlc_to_nchw'
 ]

@@ -1,3 +1,5 @@
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+
 import torch
 from mmcv.cnn import ConvModule, constant_init
 from torch import nn as nn

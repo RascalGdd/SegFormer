@@ -9,7 +9,6 @@ HEADS = Registry('head')
 LOSSES = Registry('loss')
 SEGMENTORS = Registry('segmentor')
 
-
 def build(cfg, registry, default_args=None):
     """Build a module.
 

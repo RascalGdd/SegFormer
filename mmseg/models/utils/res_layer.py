@@ -1,8 +1,11 @@
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+
 from mmcv.cnn import build_conv_layer, build_norm_layer
+from mmcv.runner import Sequential
 from torch import nn as nn
 
 
-class ResLayer(nn.Sequential):
+class ResLayer(Sequential):
     """ResLayer to build ResNet style backbone.
 
     Args:

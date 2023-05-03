@@ -1,3 +1,6 @@
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+
+
 def make_divisible(value, divisor, min_value=None, min_ratio=0.9):
     """Make divisible function.
 
