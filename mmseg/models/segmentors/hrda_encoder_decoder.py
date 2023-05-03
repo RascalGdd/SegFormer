@@ -183,6 +183,10 @@ class HRDAEncoderDecoder(EncoderDecoder):
         return out
 
     def _forward_train_features(self, img):
+        print("start forward train features")
+        print("self.scales = ", self.scales)
+        print("self.crop_size = ", self.crop_size)
+
         mres_feats = []
         self.decode_head.debug_output = {}
         assert len(self.scales) <= 2, 'Only up to 2 scales are supported.'
@@ -208,6 +212,10 @@ class HRDAEncoderDecoder(EncoderDecoder):
             #     self.decode_head.debug_output[f'Img {i} Scale {s}'] = \
             #         scaled_img.detach()
             mres_feats.append(self.extract_unscaled_feat(scaled_img))
+
+            print(i, "resolution level, scale = ", s)
+
+        print("len(mres_feats)", len(mres_feats))
         return mres_feats, prob_vis
 
     def forward_train(self,
