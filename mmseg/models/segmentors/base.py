@@ -17,7 +17,7 @@ class BaseSegmentor(nn.Module):
     __metaclass__ = ABCMeta
 
     def __init__(self, init_cfg=None):
-        super(BaseSegmentor, self).__init__(init_cfg)
+        super(BaseSegmentor, self).__init__()
         self.fp16_enabled = False
 
     @property
