@@ -9,23 +9,19 @@ _base_ = [
 norm_cfg = dict(type='SyncBN', requires_grad=True)
 find_unused_parameters = True
 model = dict(
-    type='EncoderDecoder',
+    type='HRDAEncoderDecoder',
     pretrained='pretrained/mit_b3.pth',
     backbone=dict(
-        type='mit_b3_custom_baseline',
+        type='mit_b3',
         style='pytorch'),
     decode_head=dict(
-        type='SegFormerHead',
-        in_channels=[64, 128, 320, 512], # cat
-        in_index=[0, 1, 2, 3],
-        feature_strides=[4, 8, 16, 32],
-        channels=128,
-        dropout_ratio=0.1,
-        num_classes=19,
-        norm_cfg=norm_cfg,
-        align_corners=False,
-        decoder_params=dict(embed_dim=768),
-        loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0)),
+        type='HRDAHead',
+        # Use the DAFormer decoder for each scale.
+        single_scale_head='DAFormerHead',
+        # Learn a scale attention for each class channel of the prediction.
+        attention_classwise=True,
+        # Set the detail loss weight $\lambda_d=0.1$.
+        hr_loss_weight=0.1),
     # model training and testing settings
     train_cfg=dict(),
     # test_cfg=dict(mode='whole'))

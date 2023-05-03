@@ -1,10 +1,13 @@
+import os
 import os.path as osp
+import pathlib
 import pickle
 import shutil
 import tempfile
 
 import mmcv
 import numpy as np
+from PIL import Image
 import torch
 import torch.distributed as dist
 from mmcv.image import tensor2imgs
@@ -14,13 +17,11 @@ from mmseg.ops import resize
 
 def np2tmp(array, temp_file_name=None):
     """Save ndarray to local numpy file.
-
     Args:
         array (ndarray): Ndarray to save.
         temp_file_name (str): Numpy file name. If 'temp_file_name=None', this
             function will generate a file name with tempfile.NamedTemporaryFile
             to save ndarray. Default: None.
-
     Returns:
         str: The numpy file name.
     """
@@ -38,7 +39,6 @@ def single_gpu_test(model,
                     out_dir=None,
                     efficient_test=False):
     """Test with single GPU.
-
     Args:
         model (nn.Module): Model to be tested.
         data_loader (utils.data.Dataloader): Pytorch data loader.
@@ -47,7 +47,6 @@ def single_gpu_test(model,
             the directory to save output results.
         efficient_test (bool): Whether save the results as local numpy files to
             save CPU memory during evaluation. Default: False.
-
     Returns:
         list: The prediction results.
     """
@@ -85,6 +84,13 @@ def single_gpu_test(model,
                     show=show,
                     out_file=out_file)
 
+                iIoU_path = os.path.join(out_dir, "iIoU_results", str(img_meta['ori_filename']))
+                iIoU_path = pathlib.Path(iIoU_path)
+                os.makedirs(iIoU_path.parent, exist_ok=True)
+                im = Image.fromarray(np.uint8(result[0]))
+                im.save(iIoU_path)
+                print("label saved to: ", iIoU_path)
+
         if isinstance(result, list):
             if efficient_test:
                 result = [np2tmp(_) for _ in result]
@@ -106,13 +112,11 @@ def multi_gpu_test(model,
                    gpu_collect=False,
                    efficient_test=False):
     """Test model with multiple gpus.
-
     This method tests model with multiple gpus and collects the results
     under two different modes: gpu and cpu modes. By setting 'gpu_collect=True'
     it encodes results to gpu tensors and use gpu communication for results
     collection. On cpu mode it saves the results on different gpus to 'tmpdir'
     and collects them by the rank 0 worker.
-
     Args:
         model (nn.Module): Model to be tested.
         data_loader (utils.data.Dataloader): Pytorch data loader.
@@ -121,7 +125,6 @@ def multi_gpu_test(model,
         gpu_collect (bool): Option to use either gpu or cpu to collect results.
         efficient_test (bool): Whether save the results as local numpy files to
             save CPU memory during evaluation. Default: False.
-
     Returns:
         list: The prediction results.
     """
