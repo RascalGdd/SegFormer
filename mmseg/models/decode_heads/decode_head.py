@@ -213,8 +213,30 @@ class BaseDecodeHead(nn.Module, metaclass=ABCMeta):
         output = self.conv_seg(feat)
         return output
 
+    # @force_fp32(apply_to=('seg_logit', ))
+    # def losses(self, seg_logit, seg_label):
+    #     """Compute segmentation loss."""
+    #     loss = dict()
+    #     seg_logit = resize(
+    #         input=seg_logit,
+    #         size=seg_label.shape[2:],
+    #         mode='bilinear',
+    #         align_corners=self.align_corners)
+    #     if self.sampler is not None:
+    #         seg_weight = self.sampler.sample(seg_logit, seg_label)
+    #     else:
+    #         seg_weight = None
+    #     seg_label = seg_label.squeeze(1)
+    #     loss['loss_seg'] = self.loss_decode(
+    #         seg_logit,
+    #         seg_label,
+    #         weight=seg_weight,
+    #         ignore_index=self.ignore_index)
+    #     loss['acc_seg'] = accuracy(seg_logit, seg_label)
+    #     return loss
+
     @force_fp32(apply_to=('seg_logit', ))
-    def losses(self, seg_logit, seg_label):
+    def losses(self, seg_logit, seg_label, seg_weight=None):
         """Compute segmentation loss."""
         loss = dict()
         seg_logit = resize(
@@ -224,8 +246,6 @@ class BaseDecodeHead(nn.Module, metaclass=ABCMeta):
             align_corners=self.align_corners)
         if self.sampler is not None:
             seg_weight = self.sampler.sample(seg_logit, seg_label)
-        else:
-            seg_weight = None
         seg_label = seg_label.squeeze(1)
         loss['loss_seg'] = self.loss_decode(
             seg_logit,
