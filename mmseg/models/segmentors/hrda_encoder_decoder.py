@@ -171,9 +171,9 @@ class HRDAEncoderDecoder(EncoderDecoder):
                 mres_feats.append(self.extract_slide_feat(scaled_img))
             else:
                 mres_feats.append(self.extract_unscaled_feat(scaled_img))
-            if self.decode_head.debug:
-                self.decode_head.debug_output[f'Img {i} Scale {s}'] = \
-                    scaled_img.detach()
+            # if self.decode_head.debug:
+            #     self.decode_head.debug_output[f'Img {i} Scale {s}'] = \
+            #         scaled_img.detach()
         out = self._decode_head_forward_test(mres_feats, img_metas)
         out = resize(
             input=out,
@@ -204,9 +204,9 @@ class HRDAEncoderDecoder(EncoderDecoder):
                     HRDAEncoderDecoder.last_train_crop_box[i] = crop_box
                 self.decode_head.set_hr_crop_box(crop_box)
                 scaled_img = crop(scaled_img, crop_box)
-            if self.decode_head.debug:
-                self.decode_head.debug_output[f'Img {i} Scale {s}'] = \
-                    scaled_img.detach()
+            # if self.decode_head.debug:
+            #     self.decode_head.debug_output[f'Img {i} Scale {s}'] = \
+            #         scaled_img.detach()
             mres_feats.append(self.extract_unscaled_feat(scaled_img))
         return mres_feats, prob_vis
 
@@ -249,8 +249,8 @@ class HRDAEncoderDecoder(EncoderDecoder):
                                                       seg_weight)
         losses.update(loss_decode)
 
-        if self.decode_head.debug and prob_vis is not None:
-            self.decode_head.debug_output['Crop Prob.'] = prob_vis
+        # if self.decode_head.debug and prob_vis is not None:
+        #     self.decode_head.debug_output['Crop Prob.'] = prob_vis
 
         if self.with_auxiliary_head:
             raise NotImplementedError
