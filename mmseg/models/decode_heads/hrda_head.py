@@ -191,21 +191,21 @@ class HRDAHead(BaseDecodeHead):
                 att * torch.softmax(fused_seg, dim=1), dim=1, keepdim=True)
             return att, None, None
 
-        if self.debug:
-            self.debug_output.update({
-                'High Res':
-                torch.max(hr_seg, dim=1)[1].detach().cpu().numpy(),
-                'High Res Inserted':
-                torch.max(hr_seg_inserted, dim=1)[1].detach().cpu().numpy(),
-                'Low Res':
-                torch.max(lr_seg, dim=1)[1].detach().cpu().numpy(),
-                'Fused':
-                torch.max(fused_seg, dim=1)[1].detach().cpu().numpy(),
-            })
-            if torch.is_tensor(att):
-                self.debug_output['Attention'] = torch.sum(
-                    att * torch.softmax(fused_seg, dim=1), dim=1,
-                    keepdim=True).detach().cpu().numpy()
+        # if self.debug:
+        #     self.debug_output.update({
+        #         'High Res':
+        #         torch.max(hr_seg, dim=1)[1].detach().cpu().numpy(),
+        #         'High Res Inserted':
+        #         torch.max(hr_seg_inserted, dim=1)[1].detach().cpu().numpy(),
+        #         'Low Res':
+        #         torch.max(lr_seg, dim=1)[1].detach().cpu().numpy(),
+        #         'Fused':
+        #         torch.max(fused_seg, dim=1)[1].detach().cpu().numpy(),
+        #     })
+        #     if torch.is_tensor(att):
+        #         self.debug_output['Attention'] = torch.sum(
+        #             att * torch.softmax(fused_seg, dim=1), dim=1,
+        #             keepdim=True).detach().cpu().numpy()
 
         return fused_seg, lr_seg, hr_seg
 
