@@ -56,11 +56,11 @@ class HRDAHead(BaseDecodeHead):
                     act_cfg=dict(type='ReLU'),
                     norm_cfg=attn_cfg['decoder_params']['fusion_cfg']
                     ['norm_cfg'])
-            kwargs['init_cfg'] = None
+            # kwargs['init_cfg'] = None
             kwargs['input_transform'] = 'multiple_select'
             self.os = 4
         elif single_scale_head == 'DLV2Head':
-            kwargs['init_cfg'] = None
+            # kwargs['init_cfg'] = None
             kwargs.pop('dilations')
             kwargs['channels'] = 1
             self.os = 8
