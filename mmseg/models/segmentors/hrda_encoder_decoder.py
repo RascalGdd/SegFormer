@@ -52,7 +52,6 @@ class HRDAEncoderDecoder(EncoderDecoder):
                  train_cfg=None,
                  test_cfg=None,
                  pretrained=None,
-                 init_cfg=None,
                  scales=[1],
                  hr_crop_size=None,
                  hr_slide_inference=True,
