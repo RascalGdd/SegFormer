@@ -22,6 +22,19 @@ model = dict(
         attention_classwise=True,
         # Set the detail loss weight $\lambda_d=0.1$.
         hr_loss_weight=0.1),
+    # Use the full resolution for the detail crop and half the resolution for
+    # the context crop.
+    scales=[1, 0.5],
+    # Use a relative crop size of 0.5 (=512/1024) for the detail crop.
+    hr_crop_size=[512, 512],
+    # Use LR features for the Feature Distance as in the original DAFormer.
+    feature_scale=0.5,
+    # Make the crop coordinates divisible by 8 (output stride = 4,
+    # downscale factor = 2) to ensure alignment during fusion.
+    crop_coord_divisible=8,
+    # Use overlapping slide inference for detail crops for pseudo-labels.
+    hr_slide_inference=True,
+    # Use overlapping slide inference for fused crops during test time.
     # model training and testing settings
     train_cfg=dict(),
     # test_cfg=dict(mode='whole'))
