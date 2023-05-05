@@ -1,6 +1,6 @@
 _base_ = [
     '../../_base_/models/daformer_sepaspp_mitb3.py',
-    '../../_base_/datasets/ACDC_1024x1024_dwnsample_repeat.py',
+    '../../_base_/datasets/ACDC_512x512_dwnsample_repeat.py',
     '../../_base_/default_runtime.py',
     '../../_base_/schedules/schedule_160k_adamw.py'
 ]
@@ -38,7 +38,7 @@ model = dict(
     # model training and testing settings
     train_cfg=dict(),
     # test_cfg=dict(mode='whole'))
-    test_cfg=dict(mode='slide', crop_size=(1024,1024), stride=(768,768)))
+    test_cfg=dict(mode='slide', crop_size=(1024//2,1024//2), stride=(768//2,768//2))) # modified
 
 # data
 data = dict(samples_per_gpu=1)
