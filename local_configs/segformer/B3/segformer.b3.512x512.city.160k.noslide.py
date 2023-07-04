@@ -28,8 +28,8 @@ model = dict(
         loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0)),
     # model training and testing settings
     train_cfg=dict(),
-    # test_cfg=dict(mode='whole'))
-    test_cfg=dict(mode='slide', crop_size=(1024//2,1024//2), stride=(768//2,768//2)))
+    test_cfg=dict(mode='whole'))
+    # test_cfg=dict(mode='slide', crop_size=(1024//2,1024//2), stride=(768//2,768//2)))
 
 # data
 data = dict(samples_per_gpu=1)

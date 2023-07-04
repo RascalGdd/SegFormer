@@ -1,6 +1,6 @@
 _base_ = [
     '../../_base_/models/segformer.py',
-    '../../_base_/datasets/cityscapes_512x512_repeat.py',
+    '../../_base_/datasets/cityscapes_1024x1024_repeat.py',
     '../../_base_/default_runtime.py',
     '../../_base_/schedules/schedule_160k_adamw.py'
 ]
@@ -28,8 +28,8 @@ model = dict(
         loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0)),
     # model training and testing settings
     train_cfg=dict(),
-    # test_cfg=dict(mode='whole'))
-    test_cfg=dict(mode='slide', crop_size=(1024//2,1024//2), stride=(768//2,768//2)))
+    test_cfg=dict(mode='whole'))
+    # test_cfg=dict(mode='slide', crop_size=(1024,1024), stride=(768,768)))
 
 # data
 data = dict(samples_per_gpu=1)
